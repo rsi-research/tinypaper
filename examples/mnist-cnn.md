@@ -8,14 +8,19 @@ Convolution helps even on MNIST. This paper adds one thing, a small CNN, and tak
 else from the MLP paper by link: the data, the training loop, the metric, the result type and
 the MLP's recorded accuracy. The model is the only thing that differs between the two.
 
+The accuracy claim uses the MLP's recorded results, with no rerun. The cost claim compares
+training times, which depend on the machine, so this paper reruns the MLP itself and compares
+the two times from the same run.
+
 ```cite
 name: base
 at: ./mnist-mlp.md
 ```
 
 ```python code=model
+from statistics import mean
 import torch
-from base import train
+from base import train, mlp
 
 
 def cnn():
@@ -32,14 +37,21 @@ env: base.cpu
 seeds: 3
 ```
 
-```claim
-id: c1
-stated: 2026-11-14
-expr: mean(cnn.test_acc) - mean(base.mlp.test_acc) > 0.005
+```experiment
+name: mlp_here
+call: train(base.mnist, mlp, epochs=5, seed={seed})
+env: base.cpu
+seeds: 3
 ```
 
-```claim
-id: c2
-stated: 2026-11-14
-expr: mean(cnn.train_s) < 5 * mean(base.mlp.train_s)
+```python claim=c1 stated=2026-11-14
+def c1(r):
+    # accuracy: against the MLP's recorded results in the cited paper
+    return mean(x.test_acc for x in r.cnn) - mean(x.test_acc for x in r.base.mlp) > 0.005
+```
+
+```python claim=c2 stated=2026-11-14
+def c2(r):
+    # cost: against the MLP rerun here, because train_s is a Timing field
+    return mean(x.train_s for x in r.cnn) < 5 * mean(x.train_s for x in r.mlp_here)
 ```

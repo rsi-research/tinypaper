@@ -39,8 +39,10 @@ files:
 ```python code=load
 import gzip, time
 from dataclasses import dataclass
+from statistics import mean
 import numpy as np
 import torch
+from tinypaper import Timing
 
 
 def idx(path, header):
@@ -83,7 +85,7 @@ def evaluate(model, d):
 @dataclass
 class Result:
     test_acc: float
-    train_s: float
+    train_s: Timing    # depends on the machine; comparable only within one run of the pipeline
 
 
 def train(d, make, epochs, seed):
@@ -123,20 +125,18 @@ env: cpu
 seeds: 3
 ```
 
-```claim
-id: c1
-stated: 2026-11-14
-expr: mean(mlp.test_acc) >= 0.965
+```python claim=c1 stated=2026-11-14
+def c1(r):
+    # r.<experiment> is a list of Result objects, one per seed
+    return mean(x.test_acc for x in r.mlp) >= 0.965
 ```
 
-```claim
-id: c2
-stated: 2026-11-14
-expr: mean(mlp.test_acc) - mean(linear.test_acc) > 0.04
+```python claim=c2 stated=2026-11-14
+def c2(r):
+    return mean(x.test_acc for x in r.mlp) - mean(x.test_acc for x in r.linear) > 0.04
 ```
 
-```claim
-id: c3
-stated: 2026-11-14
-expr: mean(mlp_wide.test_acc) - mean(mlp.test_acc) > 0.002
+```python claim=c3 stated=2026-11-14
+def c3(r):
+    return mean(x.test_acc for x in r.mlp_wide) - mean(x.test_acc for x in r.mlp) > 0.002
 ```
