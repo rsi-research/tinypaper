@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md)
+
 The bigram paper's count model takes any order `n`. This paper sweeps it, with two strengths of
 smoothing. Nothing new is defined except the claims.
 

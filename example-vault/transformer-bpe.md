@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [transformer](transformer.md), [bpe](bpe.md)
+
 The first version of this paper predicted that tokens would help. They did not. The training
 split is half as many tokens as characters, the model passes over it twice as often in the
 same number of steps, and it memorises it. The claim now states what was found.

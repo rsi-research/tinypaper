@@ -31,6 +31,19 @@ def emit(**values):
         raise Stop()
 
 
+def source(obj):
+    """The source text of a function or class defined in a paper, for example to measure its length."""
+    import ast, inspect, linecache
+    if hasattr(obj, "__code__"):
+        return inspect.getsource(obj)
+    inside = next(v for v in vars(obj).values() if hasattr(v, "__code__"))     # a class: find it through one of its methods
+    text = "".join(linecache.getlines(inside.__code__.co_filename))
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.ClassDef) and node.name == obj.__name__:
+            return ast.get_source_segment(text, node)
+    raise OSError(f"the source of {obj.__name__} was not found")
+
+
 def is_array(obj):
     return isinstance(obj, np.ndarray) or (type(obj).__module__.split(".")[0] == "torch" and hasattr(obj, "detach"))
 

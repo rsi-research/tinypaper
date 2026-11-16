@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [rnn](rnn.md), [transformer](transformer.md)
+
 The transformer paper claims a lead of over 0.05 bits per character over the GRU. But its GRU
 has a seventh of the transformer's parameters and neither learning rate was tuned. This paper
 reruns both at matched size, over three learning rates, picks each model's rate on the

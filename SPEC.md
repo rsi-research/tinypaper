@@ -22,6 +22,16 @@ them, and rerun it. With its logs you can also recompute anything from the raw o
 Rule of thumb: what an author writes is markdown, what the runner measures and is small goes
 into the paper, and what the runner measures and is large goes to the logs.
 
+### Two ways to arrive at a paper
+
+- **Write it, then run it.** The paper is the program from the start.
+- **Do the research anywhere, then summarise it.** Explore in scripts, notebooks or a framework,
+  and write the paper afterwards as the compact form of what was found.
+
+Either way, the results block is only ever written by running the paper. Rerunning a summary
+is what shows that the compact form regenerates the result. A summary that has not been run is
+still a valid paper: its claims are open, and numbers in its prose are not evidence.
+
 ## 1. The file
 
 A paper starts with a header and is otherwise prose with fenced blocks. Prose is for people
@@ -68,11 +78,17 @@ at: ./char-bigram.md
 
 - `name` is the short name. It then works everywhere: `from base import ngram` in code,
   `base.text` for a data block, `base.cpu` for an env, `r.base.bigram` for its results.
-- `at` is a path relative to the citing paper, or an https URL to a paper in another vault.
+- `at` is a path relative to the citing paper. A cited paper is always a local file, so a
+  vault is complete in itself and ordinary markdown tools can follow its links.
+- `source` is optional: the address the file came from, for a paper from another vault. If the
+  file is missing it is copied from there.
 - `code` is optional: the cited paper's code hash. If present it must match. It pins the code
   and data blocks, not the whole file, because the results block changes when a paper is run.
 - A paper cites directly every paper it takes something from. Names do not reach through a
   cite: there is no `a.b.name`.
+- The tools keep one line under the header, `Cites: [char-bigram](char-bigram.md), ...`, derived
+  from the cite blocks. It makes the cites ordinary links, on GitHub and in a notes tool such
+  as Obsidian, where they become the graph. `paper.tidy()` rewrites it, and so does a run.
 
 ### `env`
 
@@ -137,8 +153,8 @@ The block only declares runs. `run(name, fn, env=None, seeds=None, **arguments)`
 - `fn` is the function to call, with `arguments` as keywords. An argument is a literal, a
   function, a data block, or another run. A run passed as an argument is replaced by its
   output, and is run first if it has no result.
-- `seeds=k` calls the function k times with `seed=1..k`. Without it the function is called
-  once, with no seed.
+- `seeds=k` calls the function k times with `seed=1..k`, and `seeds=[0, 5]` with exactly those
+  seeds. Without it the function is called once, with no seed.
 - **The runner sets `seed` and `device`.** Neither may appear in the call. If the function
   has a `device` parameter the runner passes one, so a paper written for a GPU can still be
   started on a CPU.
@@ -168,6 +184,9 @@ A function may report values as it runs:
 from tinypaper import emit
 emit(step=step, loss=loss)
 ```
+
+`tinypaper.source(obj)` gives the source text of a function or class defined in a paper, for a
+run that needs it, for example to charge an algorithm for the length of its code.
 
 The first ten emitted values of each run are reported in the paper, and the whole stream goes
 to the logs. They let a rerun be compared with the paper before it finishes, and they let the
@@ -202,6 +221,9 @@ Header attributes:
   ignored. `check` computes the real difference and fails if it is not what was declared.
 - `challenges=<cite>.<claim>`: this claim disputes that claim of a cited paper.
 
+A claim is true or false. There is no third verdict. To say "better on average but not on
+every stream", make two claims: one for the average, one for every stream.
+
 A claim's status is computed, never written:
 
 | Status | Meaning |
@@ -234,6 +256,10 @@ one run:
 
 Only the author's runs are in the paper, and only runs the paper still declares. Another
 person's rerun never edits the paper: it goes to the logs.
+
+`paper.run()` does every declared run that has no fresh result; `only=[...]` limits it to some
+experiments. Several processes may run the same paper at once, for example one per GPU: each
+takes the next run nobody has started, and they do not overwrite each other.
 
 ## 2. Logs
 
@@ -275,6 +301,7 @@ which of these applies to the paper's own results:
 | none | the paper has not been run |
 | reported | the results block says so. This is the author's word, as in any paper |
 | logged | the logs are loaded and agree with every reported result |
+| cited | the paper has no runs: its claims rest on the results of the papers it cites |
 
 Beyond that is a rerun: see [`reproduce`](#5-reproduce).
 

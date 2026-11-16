@@ -11,7 +11,7 @@ class Report(Strict):
     ok: bool = False                       # nothing is wrong or unreachable
     valid: bool = False                    # the paper follows the format
     problems: list[str] = []
-    evidence: str = "none"                 # of the paper's own results: none, reported, or logged
+    evidence: str = "none"                 # of the paper's own results: none, reported, logged, or cited (it has no runs)
     claims: dict[str, dict[str, str]] = {}     # claim -> {source: status}; the source "paper" is the results block
     runs: dict[str, dict[str, int]] = {}       # source -> how many declared runs are fresh, stale, missing
     ran_differently: dict[str, list[str]] = {}
@@ -30,7 +30,7 @@ class Report(Strict):
             return "\n".join(out)
         out.append(f"  {self.lines} lines of code, {self.declared} runs declared, cites {', '.join(self.cites) or 'nothing'}")
         for source, r in self.runs.items():
-            label = f"paper ({self.evidence})" if source == "paper" else f"logs `{source}`"
+            label = f"paper ({'results of cited papers' if self.evidence == 'cited' else self.evidence})" if source == "paper" else f"logs `{source}`"
             out.append(f"  {label}: {r['fresh']} fresh, {r['stale']} stale, {r['missing']} missing")
             out += [f"    {c}: {s[source]}" for c, s in self.claims.items() if source in s]
             out += ["    ran differently: " + m for m in self.ran_differently.get(source, [])]
@@ -124,6 +124,8 @@ class PaperChecks:
                     if to_row(rec).out != row.out:
                         problems.append(f"the paper reports {row.out} for run {row.experiment} {row.run[:8]}, the logs say {to_row(rec).out}")
             report.evidence = "logged" if res.rows and hits == len(res.rows) else "reported"
+        elif not declared and self._cited:
+            report.evidence = "cited"                      # it runs nothing: its claims rest on the papers it cites
         for source in sources(self):
             runs, offset = source_runs(self, source)
             state = dict(fresh=0, stale=0, missing=0)

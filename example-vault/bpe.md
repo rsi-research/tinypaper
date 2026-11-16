@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md)
+
 A tokeniser changes the unit a model predicts, so bits per token cannot be compared with bits
 per character. This paper builds token data from the character data by code, keeps the number
 of characters each token covers, and reports everything per character with the root paper's

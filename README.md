@@ -69,6 +69,10 @@ def beats_counts(r):
   paper by the runner. With the paper alone you can read them, cite them, and rerun the paper.
 - **Logs** are everything too large for the paper: full run outputs and the run log. They are
   optional. With them you can recompute anything from the raw outputs.
+- A paper can be written first and run, or written afterwards as the summary of research done
+  elsewhere. Either way its results come from running the paper itself.
+- A vault's cites are ordinary markdown links, so a vault opens as a linked set of notes in a
+  tool such as Obsidian.
 - A **store** is where logs are shared. This repository's store is the public dataset
   [rsi-research-org/tinypaper-store](https://huggingface.co/datasets/rsi-research-org/tinypaper-store),
   set in [tinypaper.toml](tinypaper.toml). A token, when a store needs one, goes in a `.env`
@@ -99,6 +103,7 @@ result = paper.reproduce(time="10m")       # rerun on this machine, as far as te
 print(result.text())                       # the tier reached, each claim, and the time still needed
 
 paper.run(name="mine")                     # as the author: run what has no fresh result, and write the results block
+                                           # (safe to call from several processes at once, one per GPU)
 paper.push()                               # upload the logs to the store
 vault.to_jsonl("vault.jsonl")              # every paper as one line of JSON
 ```
@@ -118,6 +123,13 @@ Ten papers on character-level language modelling, from a counted bigram to a tra
 that defines no code, a paper with no runs, a tokeniser whose data is derived by code, and a
 paper that challenges another's claim.
 
+## CI
+
+[.github/workflows/check.yml](.github/workflows/check.yml) runs on every push and pull request. It
+tests the tools, then checks the papers the change touches and the papers that cite them, reruns
+each for up to two minutes, and writes a table to the job summary. It executes the code in the
+papers, so it is given no secrets.
+
 ## Tests
 
 ```bash
@@ -126,6 +138,5 @@ python tests/test_tinypaper.py
 
 ## Roadmap
 
-1. Check every submitted paper automatically in CI.
-2. Write the vision examples and the papers that join the two sets.
-3. Expose `check`, `run` and `reproduce` to agents as tools.
+1. Write the vision examples and the papers that join the two sets.
+2. Expose `check`, `run` and `reproduce` to agents as tools.

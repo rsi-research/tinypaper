@@ -1,5 +1,5 @@
 """TinyPaper: papers that can be checked by running them. See SPEC.md."""
-from .records import emit, Stop, Run, Runs
+from .records import emit, source, Stop, Run, Runs
 from .store import Unreachable
 from .paper import Paper
 from .vault import Vault
@@ -19,5 +19,5 @@ def reproduce(path, **kw):
     return Paper.load(path).reproduce(**kw)
 
 
-__all__ = ["Paper", "Vault", "Report", "Reproduction", "TIERS", "Unreachable", "emit", "Stop", "Run", "Runs",
+__all__ = ["Paper", "Vault", "Report", "Reproduction", "TIERS", "Unreachable", "emit", "source", "Stop", "Run", "Runs",
            "check", "run_paper", "reproduce"]

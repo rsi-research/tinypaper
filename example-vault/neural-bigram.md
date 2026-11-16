@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md)
+
 This paper adds the training loop that the neural language papers share. The loop reports its
 loss at each of the first ten steps and then every 100 with `emit`, so a rerun can be compared
 with a record after a few seconds on any machine. Its only model is a

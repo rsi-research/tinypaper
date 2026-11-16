@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [ngram](ngram.md)
+
 The first version of this paper claimed that every doubling of the window helps. On the
 records it did not: a window of 8 fits the training split better than a window of 4 and is no
 better on test. The claim now says that.

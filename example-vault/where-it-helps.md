@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md), [ngram](ngram.md), [rnn](rnn.md), [transformer](transformer.md)
+
 This paper runs nothing. Every cited paper logged the cost in bits of each test character,
 on the same characters, so this paper can ask where the cost falls. Its claims need those
 logs: with the papers alone they are open. It splits the scored

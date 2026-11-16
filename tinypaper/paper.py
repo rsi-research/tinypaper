@@ -1,5 +1,6 @@
 """Paper: one markdown file as a tree of typed parts. Parsing, rendering, its namespace and its runs."""
-import importlib.metadata, inspect, json, os, platform, re, sys, time, types
+import ast, fcntl, importlib.metadata, inspect, json, linecache, os, platform, re, socket, sys, time, types
+from contextlib import contextmanager
 from typing import Annotated, Any, Optional, Union
 import yaml
 from pydantic import Field, PrivateAttr, ValidationError
@@ -217,17 +218,18 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         return Vault.of(self.dir)
 
     def _resolve(self, cite):
-        """A cited paper: a path relative to this paper, or an https URL. A `code` pin must match."""
-        if re.match(r"https?://", cite.at):
-            path = os.path.join(store.CACHE, "papers", sha(cite.at)[:12], os.path.basename(cite.at))
+        """A cited paper: a local file. If it is missing and the cite names a source, it is copied from there.
+        A `code` pin must match."""
+        if re.match(r"\w+://", cite.at):
+            raise Unreachable(f"cite `{cite.name}`: `at` is a local path; put the address in `source`")
+        path = os.path.normpath(os.path.join(self.dir, cite.at))
+        if not os.path.isfile(path) and cite.source:
             try:
-                data = store.get(cite.at)
+                data = store.get(cite.source)
             except Exception:
-                raise Unreachable(f"cited paper `{cite.name}` at {cite.at} not found") from None
+                raise Unreachable(f"cited paper `{cite.name}` is not at {cite.at} and could not be fetched from {cite.source}") from None
             os.makedirs(os.path.dirname(path), exist_ok=True)
             open(path, "wb").write(data)
-        else:
-            path = os.path.normpath(os.path.join(self.dir, cite.at))
         if not os.path.isfile(path):
             raise Unreachable(f"cited paper `{cite.name}` at {cite.at} not found")
         cited = Paper.load(path)
@@ -268,7 +270,9 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         sys.modules.update(views)
         try:
             for c in self.code:
-                exec(compile(c.source, f"{self.path}:code={c.name}", "exec"), ns)
+                where = f"{self.path}:code={c.name}"
+                linecache.cache[where] = (len(c.source), None, c.source.splitlines(True), where)    # so tracebacks show the line
+                exec(compile(c.source, where, "exec"), ns)
         finally:
             for a, old in saved.items():
                 if old is None:
@@ -295,7 +299,8 @@ class Paper(Strict, PaperChecks, PaperReproduce):
                 if "device" in kw or "seed" in kw:
                     raise ValueError(f"run {name}: `device` and `seed` are set by the runner, not in the call")
                 args = {k: canonical(v) for k, v in sorted(kw.items())}
-                made = [Declared(self, name, fn, kw, env, s, args) for s in (range(1, seeds + 1) if seeds else [None])]
+                which = list(seeds) if isinstance(seeds, (list, tuple)) else range(1, seeds + 1) if seeds else [None]
+                made = [Declared(self, name, fn, kw, env, s, args) for s in which]
                 out.extend(made)
                 return made if seeds else made[0]
             for block in self._of("experiments"):
@@ -318,8 +323,23 @@ class Paper(Strict, PaperChecks, PaperReproduce):
 
     def save_logs(self):
         os.makedirs(os.path.dirname(self.logs_path), exist_ok=True)
-        with open(self.logs_path, "w") as f:
+        with open(self.logs_path + ".tmp", "w") as f:
             f.write(self.logs.model_dump_json())
+        os.replace(self.logs_path + ".tmp", self.logs_path)
+
+    @contextmanager
+    def locked(self):
+        """Hold this paper's lock and see what other processes have written. Several processes may
+        run one paper at once; each reads and writes its logs and results block only inside this."""
+        os.makedirs(os.path.dirname(self.logs_path), exist_ok=True)
+        with open(self.logs_path + ".lock", "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                if os.path.exists(self.logs_path):
+                    self._logs = Logs.model_validate_json(open(self.logs_path).read())
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
     def load_logs(self, deep=True):
         """Fetch this paper's logs from the store and add them to the local ones. Returns whether any were found.
@@ -393,11 +413,32 @@ class Paper(Strict, PaperChecks, PaperReproduce):
                      env=d.env.name if d.env else None, code=self.code_hash, status=status, error=error,
                      seconds=round(time.time() - start, 2), ran_on=ran_on(d.env, device), emitted=stream["stream"],
                      out=encode(out, self.large_dir) if status == "done" else None)
-        self.logs.sets.setdefault(name, RecordSet(seed_offset=offset)).runs[rec.id] = rec
-        self.logs.events.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), event="run", set=name, experiment=d.name,
-                                     id=rec.id, args=d.args, seed=seed, code=self.code_hash, status=status, seconds=rec.seconds))
-        self.save_logs()
+        with self.locked():
+            self.logs.sets.setdefault(name, RecordSet(seed_offset=offset)).runs[rec.id] = rec
+            self.logs.events.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), event="run", set=name, experiment=d.name,
+                                         id=rec.id, args=d.args, seed=seed, code=self.code_hash, status=status, seconds=rec.seconds))
+            self.save_logs()
         return rec
+
+    def _taken(self, d, name):
+        """Is another live process already doing this run?"""
+        rs = self.logs.sets.get(name)
+        rec = rs.runs.get(d.id()) if rs else None
+        if rec is None or rec.status != "running" or rec.code != self.code_hash:
+            return False
+        host, _, pid = (rec.owner or "").rpartition(":")
+        if host == socket.gethostname():
+            try:
+                os.kill(int(pid), 0)
+            except (OSError, ValueError):
+                return False                       # that process is gone
+            return int(pid) != os.getpid()
+        return time.time() - (rec.started or 0) < 24 * 3600
+
+    def _disk_results(self):
+        """The results block as it is in the file now, which another process may have just written."""
+        m = re.search(r"^```results\n(.*?)^```[ \t]*$", open(self.path).read(), re.S | re.M)
+        return parse_block("results", [], m.group(1), m.group(0)) if m else None
 
     def fresh(self, d, name, offset=0):
         """The record of a declared run in set `name`, if it finished and the code has not changed since."""
@@ -419,36 +460,72 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         if changed:
             self.save_logs()
 
-    def run(self, name="author", device=None, deep=False, rerun=False, say=print):
+    def run(self, name="author", device=None, deep=False, rerun=False, only=None, say=print):
         """Run every declared run that has no fresh result, as the author.
 
         The small values go into the paper's results block, and the paper file is rewritten. The
-        full outputs go to the logs, as record set `name`. With deep=True the cited papers run first."""
+        full outputs go to the logs, as record set `name`. With deep=True the cited papers run first.
+        `only` is a list of experiment names to run; the others are left as they are."""
         device, done = device or default_device(), []
+        self.tidy()
         if deep:
             for p in self._cited.values():
-                done += p.run(name, device, True, rerun, say)
-        self.log_claim_edits()
+                done += p.run(name, device, True, rerun, None, say)
         declared = self.declared()
-        old = self.results
-        rows = {r.run: r for r in old.rows} if old and old.set == name else {}
-        machine = dict(old.ran_on) if old and old.set == name else {}
+        with self.locked():
+            self.log_claim_edits()
         for d in declared:
-            have = rows.get(d.id())
-            if have is not None and have.code == self.code_hash and not rerun:
+            if only and d.name not in only:
                 continue
-            rec = self.fresh(d, name) if not rerun else None
+            with self.locked():                    # take the next run nobody has done or is doing
+                old = self._disk_results()
+                rows = {r.run: r for r in old.rows} if old and old.set == name else {}
+                have = rows.get(d.id())
+                if (have is not None and have.code == self.code_hash and not rerun) or self._taken(d, name):
+                    continue
+                rec = self.fresh(d, name) if not rerun else None
+                if rec is None:
+                    self.logs.sets.setdefault(name, RecordSet()).runs[d.id()] = Record(
+                        id=d.id(), experiment=d.name, fn="fn:" + d.fn.__name__, args=d.args, seed=d.seed, code=self.code_hash,
+                        status="running", seconds=0, ran_on={}, owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
+                    self.save_logs()
             if rec is None:
                 rec = self.execute(d, name, device)
                 done.append(rec)
                 say(f"{self.stem}: {d.name} {json.dumps({k: v for k, v in d.args.items() if not str(v).startswith(('fn:', 'data:'))})}"
                     f" seed={d.seed} {rec.status} in {rec.seconds}s" + (f" ({rec.error})" if rec.error else ""))
             if rec.status == "done":
-                rows[rec.id] = to_row(rec)
-                keep = [rows[x.id()] for x in declared if x.id() in rows]      # only runs the paper still declares
-                machine = {**machine, **rec.ran_on, "packages": {**machine.get("packages", {}), **rec.ran_on["packages"]}}
-                self._write_results(Results(set=name, ran_on=machine, rows=keep))
+                with self.locked():                # add this run to whatever the results block holds now
+                    old = self._disk_results()
+                    same = old is not None and old.set == name
+                    rows = {r.run: r for r in old.rows} if same else {}
+                    machine = dict(old.ran_on) if same else {}
+                    rows[rec.id] = to_row(rec)
+                    keep = [rows[x.id()] for x in declared if x.id() in rows]      # only runs the paper still declares
+                    machine = {**machine, **rec.ran_on, "packages": {**machine.get("packages", {}), **rec.ran_on["packages"]}}
+                    self._write_results(Results(set=name, ran_on=machine, rows=keep))
         return done
+
+    def tidy(self):
+        """Rewrite the parts of the file that are derived from the rest: the line of links to the
+        papers it cites. Returns whether the file changed."""
+        cites = self._of("cite")
+        line = "Cites: " + ", ".join(f"[{os.path.basename(c.at)[:-3]}]({c.at[2:] if c.at.startswith('./') else c.at})" for c in cites) + "\n"
+        first = self.parts[0] if self.parts and self.parts[0].kind == "prose" else None
+        if first is None:
+            return False
+        text = re.sub(r"^Cites: .*\n\n?", "", first.text, flags=re.M)
+        if cites:
+            m = re.match(r"---\n.*?\n---\n\n?", text, re.S)
+            at = m.end() if m else 0
+            text = text[:at] + line + "\n" + text[at:]
+        if text == first.text:
+            return False
+        self.parts[0] = Prose(text=text)
+        self._text = self.render()
+        with open(self.path, "w") as f:
+            f.write(self._text)
+        return True
 
     def _write_results(self, results):
         parts = []

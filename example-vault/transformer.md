@@ -4,6 +4,8 @@ tinypaper: 0.3
 date: 2026-11-15
 ---
 
+Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [rnn](rnn.md)
+
 A four-layer transformer with causal attention, trained by the shared loop for the same number
 of steps as the GRU of the recurrent paper. The block takes its normalisation and its skip
 connections as arguments, so later papers can vary them without copying it.

@@ -312,6 +312,54 @@ def test_two_agents_one_store():
     assert rep.ok and rep.claims["c1"] == {"paper": "holds", "agent-1": "holds", "agent-2": "holds"}
 
 
+WORKER = '''
+import sys
+sys.path.insert(0, sys.argv[1])
+import tinypaper as tp
+tp.store.CACHE = sys.argv[3]
+print(len(tp.Paper.load(sys.argv[2]).run(name="mine", device="cpu", say=lambda *a: None)))
+'''
+
+
+def test_parallel_runs():
+    import subprocess
+    d, a, b = setup()
+    edit(a, "    rng = np.random.default_rng(seed)\n", "    rng = np.random.default_rng(seed)\n    import time\n    time.sleep(0.4)\n")
+    paper(a).load_data("nums")                                    # fetch the data once, before the workers start
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    workers = [subprocess.Popen([sys.executable, "-c", WORKER, root, a, store.CACHE], stdout=subprocess.PIPE, text=True) for _ in range(3)]
+    counts = [int(w.communicate()[0].strip().splitlines()[-1]) for w in workers]
+    tp.paper.PAPERS.clear()
+    p = paper(a)
+    runs = [e for e in p.logs.events if e["event"] == "run"]
+    assert sum(counts) == 6 and len(runs) == 6 and len({e["id"] for e in runs}) == 6, (counts, len(runs))    # each run was done once
+    assert len(p.results.rows) == 6 and p.check().ok and max(counts) < 6, counts                           # and the work was shared
+
+
+def test_cite_from_another_vault():
+    d, a, b = setup()
+    elsewhere = os.path.join(d, "elsewhere.md")
+    shutil.move(a, elsewhere)                                     # the cited paper lives in another vault
+    edit(b, "at: ./a.md", f"at: ./a.md\nsource: file://{elsewhere}")
+    rep = paper(b).check()
+    assert rep.ok and os.path.exists(a), rep.problems             # it was copied into this vault
+    edit(b, "at: ./a.md", "at: https://example.org/a.md")
+    assert "local path" in paper(b).check().problems[0]
+
+
+def test_tidy_and_source():
+    d, a, b = setup("abc")
+    v = tp.Vault(os.path.dirname(a))
+    assert v.tidy() == ["b", "c"] and v.tidy() == []
+    assert "\nCites: [a](a.md)\n" in open(b).read() and paper(b).check().ok
+    edit(a, "def use(init):\n    return dict(total=float(init[\"w\"].sum()))",
+         "class Thing:\n    def size(self):\n        return 1\n\n\ndef use(init):\n    from tinypaper import source\n"
+         "    return dict(total=float(init[\"w\"].sum()), chars=len(source(use)), cls=source(Thing).splitlines()[0])")
+    paper(a).run(name="mine", device="cpu", say=quiet)
+    out = [r for r in paper(a).results.rows if r.experiment == "post"][0].out
+    assert out["chars"] > 50 and out["cls"] == "class Thing:", out   # a run can read its own source, for example to charge for its length
+
+
 def test_large_arrays():
     d, a, b = setup()
     records.LARGE = 8                                             # treat even small arrays as too large for the logs file

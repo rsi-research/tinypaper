@@ -61,6 +61,10 @@ class Vault:
     def run(self, name="author", device=None, say=print):
         return [rec for p in self for rec in p.run(name, device, say=say)]
 
+    def tidy(self):
+        """Bring every paper's derived parts up to date. Returns the names of the papers that changed."""
+        return [name for name, p in self.papers.items() if p.tidy()]
+
     def load_logs(self):
         return {name: p.load_logs(deep=False) for name, p in self.papers.items()}
 

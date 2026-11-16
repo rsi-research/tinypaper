@@ -84,15 +84,21 @@ def data_file(url, digest, verify=False):
     path = os.path.join(CACHE, "files", digest)
     if os.path.exists(path) and (not verify or file_sha(path) == digest):
         return path
-    try:
-        data = urllib.request.urlopen(url, timeout=120).read()
-    except Exception:
-        data = None
-    if data is None or sha(data) != digest:
-        raise Unreachable(f"data file {url} (sha256 {digest[:12]}) not found with a matching hash")
+    import hashlib
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(data)
+    part, h = path + ".part", hashlib.sha256()
+    try:                                   # straight to disk, so a file larger than memory is fine
+        with urllib.request.urlopen(url, timeout=120) as r, open(part, "wb") as f:
+            for chunk in iter(lambda: r.read(1 << 20), b""):
+                h.update(chunk)
+                f.write(chunk)
+    except Exception:
+        h = None
+    if h is None or h.hexdigest() != digest:
+        if os.path.exists(part):
+            os.remove(part)
+        raise Unreachable(f"data file {url} (sha256 {digest[:12]}) not found with a matching hash")
+    os.replace(part, path)
     return path
 
 

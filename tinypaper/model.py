@@ -36,7 +36,8 @@ class Block(Strict):
 class Cite(Block):
     kind: Literal["cite"] = "cite"
     name: str
-    at: str                        # a path relative to the citing paper, or an https URL
+    at: str                        # a path relative to the citing paper: a cited paper is always a local file
+    source: Optional[str] = None   # where the file came from, if another vault; it is fetched from there if missing
     code: Optional[str] = None     # if given, the cited paper's code hash must equal it
 
     @field_validator("code", mode="before")
@@ -135,6 +136,8 @@ class Record(Strict):
     ran_on: dict[str, Any]
     emitted: list[dict[str, Any]] = []
     out: Any = None
+    owner: Optional[str] = None    # while status is "running": the host and process doing it
+    started: Optional[float] = None
 
 
 class RecordSet(Strict):
