@@ -26,7 +26,7 @@ class Reproduction(Strict):
     """How far a rerun got, as counts."""
     paper: str
     device: str
-    checked: bool = False                  # `check` passed
+    verified: bool = False                 # `verify` found nothing wrong with the format or what the paper needs
     problems: list[str] = []
     calls: int = 0                         # distinct calls the paper makes
     started: int = 0                       # calls that began on this machine
@@ -48,7 +48,7 @@ class Reproduction(Strict):
         return sum(s in ("holds", "fails") for s in self.claims.values())
 
     def text(self):
-        out = [f"{self.paper} (on {self.device}): {'check passed' if self.checked else 'check FAILED'}"]
+        out = [f"{self.paper} (on {self.device}): {'verified' if self.verified else 'NOT verified'}"]
         out += ["  problem: " + p for p in self.problems]
         out.append(f"  {self.started} of {self.calls} calls started; first points match the paper in {self.matched} of {self.compared} compared")
         out.append(f"  {self.rerun} of {self.calls} calls rerun to the end"
@@ -87,22 +87,17 @@ class PaperReproduce:
         deadline = None if limit is None else begin + limit
         device = device or default_device()
         result = Reproduction(paper=self.stem, device=device)
-        report = self.check()
-        result.checked, result.problems = report.ok, list(report.problems)
+        report = self.verify()
+        result.verified, result.problems = not report.problems, list(report.problems)
         if not report.valid:
             return result
         calls, refs = self.calls(), self.logged
         result.calls = len(calls)
-        with self.locked():
-            self.note_claim_edits()
-            self.local.rerun = {i: e for i, e in self.local.rerun.items() if i in {d.id for d in calls}}    # drop calls the paper no longer makes
-            self.save_local()
+        self.local.rerun = {i: e for i, e in self.local.rerun.items() if i in {d.id for d in calls}}    # drop calls the paper no longer makes
 
         def keep(d, got):
-            with self.locked():
-                if got.entry:
-                    self.local.rerun[d.id] = got.entry
-                self._note(event="run", rerun=True, call=d.id, args=d.args, seed=d.seed, status=got.status, seconds=got.seconds)
+            if got.entry:
+                self.local.rerun[d.id] = got.entry
                 self.save_local()
 
         def left():
@@ -119,7 +114,7 @@ class PaperReproduce:
             else:
                 if ref is not None and not ref.emitted and ref.seconds * (median(ratios) if ratios else 1) > left():
                     continue                       # it emits nothing as it runs, so it cannot be stopped: do not start it
-                got = self.execute(d, device, self.local.rerun, max_emits=EARLY, deadline=deadline)
+                got = self._execute(d, device, self.local.rerun, max_emits=EARLY, deadline=deadline)
                 if got.status == "error":
                     errors += 1
                     result.problems.append(f"{d.name} failed to start: {got.error}")
@@ -165,12 +160,12 @@ class PaperReproduce:
                     continue
                 for d in need:
                     if d.id not in self.local.rerun and left() > 0:
-                        got = self.execute(d, device, self.local.rerun, deadline=deadline)
+                        got = self._execute(d, device, self.local.rerun, deadline=deadline)
                         keep(d, got)
                         say(f"{self.stem}: {d.name} seed={d.seed} {got.status} in {got.seconds}s")
             if deadline is None:
                 for d in missing():
-                    keep(d, self.execute(d, device, self.local.rerun))
+                    keep(d, self._execute(d, device, self.local.rerun))
 
         for c in self.claims:
             status = evaluate(self, c, self.local.rerun)[0]

@@ -46,7 +46,7 @@ def smoothing_matters(r):
 ```
 
 ```log
-{"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 10, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}
 {"call":"8ec9b130e36168f9","fn":"fn:ngram","args":{"alpha":1.0,"d":"data:char-bigram/text","n":3},"seconds":0.04,"out":{"test_bpc":3.02884578704834,"val_bpc":2.939361095428467,"train_bpc":2.8658430576324463,"at_word_start":4.134876728057861,"elsewhere":2.773030996322632}}
 {"call":"2e67aaa31cb11ee1","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:char-bigram/text","n":3},"seconds":0.04,"out":{"test_bpc":3.0444157123565674,"val_bpc":2.8840770721435547,"train_bpc":2.80180287361145,"at_word_start":4.130579471588135,"elsewhere":2.7931952476501465}}
 {"call":"6b018d01f0030180","fn":"fn:ngram","args":{"alpha":1.0,"d":"data:char-bigram/text","n":4},"seconds":0.04,"out":{"test_bpc":2.8757052421569824,"val_bpc":2.7587738037109375,"train_bpc":2.5582144260406494,"at_word_start":4.169795036315918,"elsewhere":2.5763936042785645}}

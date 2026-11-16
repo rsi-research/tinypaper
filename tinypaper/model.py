@@ -98,7 +98,7 @@ class Claim(Block):
 
 class Entry(Strict):
     """What happened when one call ran: what its function returned and what it emitted."""
-    call: str                      # the call's identity
+    call: Optional[str] = None     # the call's identity; `tidy` fills it in when the author leaves it out
     fn: str
     args: dict[str, Any]
     seed: Optional[int] = None
@@ -108,18 +108,15 @@ class Entry(Strict):
 
 
 class Log(Block):
-    """The log block: the author's log, written into the paper by the runner."""
+    """The log block: what each of the paper's calls gave, as the author recorded it."""
     kind: Literal["log"] = "log"
     ran_on: dict[str, Any] = {}
-    history: dict[str, Any] = {}   # counts from the history: runs made, claims edited after results existed
     entries: list[Entry] = []
 
 
 class Local(Strict):
     """What the tools keep beside the vault for one paper. None of it is part of the paper."""
     rerun: dict[str, Entry] = {}               # the calls a reproduction has finished on this machine
-    history: list[dict[str, Any]] = []         # every run made and every claim edited, in order
-    running: dict[str, dict[str, Any]] = {}    # calls some process is running now, and which process
 
 
 @dataclass

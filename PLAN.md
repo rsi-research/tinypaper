@@ -4,7 +4,7 @@ The examples are the test cases for the format. Each one exists to exercise a ki
 dependency or a rule. This file lists the planned set, what each paper tests, and how far it is.
 
 Status of the set: the language papers are written in format 0.5 under `example-vault/` and run
-with the checker and runner. The vision
+with the tools. The vision
 papers and the joining papers are not written.
 
 ## The graph
@@ -73,7 +73,7 @@ The format the papers use is defined in [SPEC.md](SPEC.md).
 ## What has been run
 
 Every paper in the example vault has been run in full by its author run, on one A40 GPU with
-PyTorch 2.6.0, and carries its log in its own file. All 19 claims hold. `check` flags each
+PyTorch 2.6.0, and carries its log in its own file. All 19 claims hold. `verify` flags each
 paper as run differently from its declared environment (PyTorch 2.11.0 on CPU).
 
 Each paper was then given a two-minute `reproduce` on a CPU. The four cheap papers were rerun
@@ -104,5 +104,5 @@ says so in its prose:
   overfits and is worse.
 
 The challenge holds: at equal size and tuned learning rates the GRU beats the transformer, so
-`transformer` / `beats_rnn` is true as stated and misleading as a conclusion. `check` on
+`transformer` / `beats_rnn` is true as stated and misleading as a conclusion. `verify` on
 `transformer` reports the challenge.

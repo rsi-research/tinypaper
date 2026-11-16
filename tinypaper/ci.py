@@ -1,4 +1,4 @@
-"""What a CI job runs on a vault: check the papers a change touches, and rerun them briefly.
+"""What a CI job runs on a vault: verify the papers a change touches, and rerun them briefly.
 
     python -m tinypaper.ci example-vault --base <commit> --time 2m
 
@@ -52,13 +52,13 @@ def main(argv=None):
     names, why = touched(vault, args.base)
     papers = [vault[n] for n in names]
     pins = [] if args.no_install else install(papers)
-    lines = [f"## TinyPaper check: `{vault.name}`", "",
+    lines = [f"## TinyPaper: `{vault.name}`", "",
              f"{len(papers)} of {len(vault.papers)} papers ({why}). Installed: {', '.join(pins) or 'nothing'}. "
              f"Each paper was rerun for up to {args.time} on this runner.", "",
-             "| Paper | Check | Claims on its log | First points match | Calls rerun | Claims rerun | Still needed |", "|---|---|---|---|---|---|---|"]
+             "| Paper | Verify | Claims on its log | First points match | Calls rerun | Claims rerun | Still needed |", "|---|---|---|---|---|---|---|"]
     ok, details = True, []
     for p in papers:
-        report = p.check()
+        report = p.verify()
         ok &= report.ok
         held = sum(s == "holds" for s in report.claims.values())
         r = p.reproduce(time=args.time, say=lambda *a: None) if report.valid else None

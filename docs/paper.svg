@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 448" role="img" aria-label="One file in, two questions answered">
+<style>
+.ink{fill:#1f2328}.quiet{fill:#59636e}.edge{stroke:#a8a59a;fill:none;stroke-width:1.25}.head{fill:#a8a59a}
+.acc{stroke:#2a78d6}.accf{fill:#2a78d6}.good{fill:#1a9f2d}.bad{fill:#d1383d}.bg{fill:#ffffff}
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:13px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.b{font-weight:600}.s{font-size:11.5px}.t{font-size:15px;font-weight:600}
+@media (prefers-color-scheme: dark){.ink{fill:#e6edf3}.quiet{fill:#9198a1}.edge{stroke:#6e7681}.head{fill:#6e7681}.acc{stroke:#58a6ff}.accf{fill:#58a6ff}.good{fill:#3fb950}.bad{fill:#f85149}.bg{fill:#0d1117}}
+</style>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head"/></marker></defs>
+<rect class="bg" width="760" height="448"/>
+<text x="24" y="34" class="ink t">One file in, two questions answered</text>
+<rect x="24" y="64" width="208" height="296" rx="8" class="accf" fill-opacity="0.12" stroke-width="0"/><rect x="24" y="64" width="208" height="296" rx="8" class="acc" fill="none" stroke-width="2"/>
+<text x="40" y="86" class="ink b mono">paper.md</text>
+<rect x="40" y="96" width="176" height="56" rx="8" class="edge"/>
+<text x="56" y="121" class="ink b">code</text>
+<text x="56" y="138" class="quiet s">what the paper contributes</text>
+<rect x="40" y="160" width="176" height="56" rx="8" class="edge"/>
+<text x="56" y="185" class="ink b">experiments</text>
+<text x="56" y="202" class="quiet s">the calls to run</text>
+<rect x="40" y="224" width="176" height="56" rx="8" class="edge"/>
+<text x="56" y="249" class="ink b">claims</text>
+<text x="56" y="266" class="quiet s">functions that return true</text>
+<rect x="40" y="288" width="176" height="56" rx="8" class="edge"/>
+<text x="56" y="313" class="ink b">log</text>
+<text x="56" y="330" class="quiet s">what each call gave</text>
+<line x1="128" y1="360" x2="128" y2="384" class="edge"/><rect x="24" y="384" width="208" height="40" rx="8" class="edge" stroke-dasharray="4 4"/>
+<text x="128" y="408" class="quiet" text-anchor="middle">papers it cites</text>
+<text x="138" y="376" class="quiet s">cites</text>
+<path d="M240 124H250V188H240" class="edge"/><path d="M250 156H472" class="edge" marker-end="url(#a)"/><path d="M240 252H250V316H240" class="edge"/><path d="M250 284H472" class="edge" marker-end="url(#a)"/>
+<text x="361" y="146" class="ink b mono" text-anchor="middle">reproduce()</text>
+<text x="361" y="174" class="quiet s" text-anchor="middle">reruns on your machine</text>
+<text x="361" y="274" class="ink b mono" text-anchor="middle">verify()</text>
+<text x="361" y="302" class="quiet s" text-anchor="middle">seconds, runs nothing</text>
+<rect x="472" y="100" width="264" height="112" rx="8" class="edge"/>
+<text x="488" y="124" class="ink b">Is the log real?</text>
+<path d="M488 146C510 176 550 186 600 188" class="edge"/>
+<circle cx="488" cy="146" r="3.5" class="accf"/>
+<circle cx="508" cy="165" r="3.5" class="accf"/>
+<circle cx="534" cy="177.5" r="3.5" class="accf"/>
+<circle cx="565" cy="185" r="3.5" class="accf"/>
+<circle cx="600" cy="188" r="3.5" class="accf"/>
+<circle cx="628" cy="172" r="3.5" class="accf"/>
+<line x1="620" y1="152" x2="636" y2="152" class="edge"/>
+<text x="644" y="156" class="quiet s">the log</text>
+<text x="644" y="176" class="quiet s">your rerun</text>
+<text x="620" y="200" class="ink s">match to 0.1%</text>
+<rect x="472" y="228" width="264" height="112" rx="8" class="edge"/>
+<text x="488" y="252" class="ink b">Which claims hold?</text>
+<text x="488" y="278" class="ink s mono">beats_counts</text>
+<circle cx="668" cy="274" r="4" class="good"/>
+<text x="680" y="278" class="ink s">holds</text>
+<text x="488" y="300" class="ink s mono">more_context_helps</text>
+<circle cx="668" cy="296" r="4" class="good"/>
+<text x="680" y="300" class="ink s">holds</text>
+<text x="488" y="322" class="ink s mono">scales_linearly</text>
+<circle cx="668" cy="318" r="4" class="bad"/>
+<text x="680" y="322" class="ink s">fails</text>
+</svg>

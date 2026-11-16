@@ -22,15 +22,16 @@ A paper carries its author's log inside the file. There is no other store: the l
 later paper has unless it reruns yours, so what goes into it is the author's most important
 choice (see [What to log](#what-to-log)).
 
-### Two ways to arrive at a paper
+### Who runs the experiments
 
-- **Write it, then run it.** The paper is the program from the start.
-- **Do the research anywhere, then summarise it.** Explore in scripts, notebooks or a framework,
-  and write the paper afterwards as the compact form of what was found.
+Not TinyPaper. The author runs the paper's calls any way they like, on any machines, and writes
+what each call gave into the log. The tools then do two things: `verify` checks the format and
+evaluates the claims on that log, taking the log as given, and `reproduce` reruns the calls and
+compares them with the log.
 
-Either way, the log is only ever written by running the paper. Rerunning a summary is what
-shows that the compact form regenerates the result. A summary that has not been run is still a
-valid paper: its claims are open, and numbers in its prose are not evidence.
+So a paper can be written first and run afterwards, or written as the compact form of research
+already done, with its log converted from results that exist. Either way a log is a statement
+by the author until someone reproduces it. Numbers in prose are never evidence.
 
 ## 1. The file
 
@@ -56,7 +57,7 @@ fenced block is part of the prose. A block with an unknown field is an error.
 | `python code=<name>` | source code | author |
 | `python experiments` | the calls, under experiment names | author |
 | `python claim=<id>` | a function of a log that should return true | author |
-| `log` | what each call returned and emitted | the runner |
+| `log` | what each call returned and emitted | the author, from their runs |
 
 ### Where code goes
 
@@ -100,7 +101,7 @@ packages: [ "torch==2.11.0" ]
 ````
 
 `packages` are pip requirements. A package installed from git (`git+https://...@<commit>`) is
-allowed and is listed by `check`, because its code is not visible in any paper.
+allowed and is listed by `verify`, because its code is not visible in any paper.
 
 ### `data`
 
@@ -156,9 +157,9 @@ The block only declares calls. `call(name, fn, env=None, seeds=None, **arguments
   output, and is run first if it is not logged.
 - `seeds=k` makes k calls with `seed=1..k`, and `seeds=[0, 5]` with exactly those seeds. Without
   it there is one call, with no seed.
-- **The runner sets `seed` and `device`.** Neither may appear in the call. If the function
-  has a `device` parameter the runner passes one, so a paper written for a GPU can still be
-  started on a CPU.
+- **`seed` and `device` are not arguments of the call.** The seed comes from `seeds=`, and the
+  device is chosen by whoever runs the function. If the function has a `device` parameter,
+  `reproduce` passes one, so a paper written for a GPU can still be started on a CPU.
 - `name` is the experiment the call belongs to. An experiment is a named set of calls, and
   claims select calls by it.
 - `call` returns the call (a list of them with `seeds`), so it can be passed on.
@@ -186,8 +187,8 @@ from tinypaper import emit
 emit(step=step, loss=loss)
 ```
 
-Both go into the log as they are. A call may add at most 20,000 characters to the log. A call
-that goes over is refused with a message, and nothing is logged for it.
+Both go into the log as they are. A call may add at most 20,000 characters to the log. An entry
+that goes over is refused by the tools.
 
 #### What to log
 
@@ -200,7 +201,7 @@ your work would need, and nothing raw.
 - **A curve at a few points**: the first ten steps, so a rerun can be checked cheaply; then
   sparsely; then the end.
 - **What the result cost**: model size, and anything else a comparison should be fair about.
-  The runner logs the time each call took.
+  Each log entry also records the time its call took.
 - **A summary where a distribution matters**, such as the metric by group or a few quantiles.
   Never the raw array.
 - **If you introduce a better metric**, publish it as a function others can import, and log the
@@ -250,7 +251,7 @@ A claim's status is computed, never written:
 | open | a call it reads is not in the log |
 | error | the function raised |
 
-For a claim that evaluates, `check` also reports what differs among the calls it read: the
+For a claim that evaluates, `verify` also reports what differs among the calls it read: the
 argument names whose values differ, or `fn` if the calls use different functions. The author
 does not declare this. It is there so a reader can see at a glance what a claim compares.
 
@@ -258,47 +259,44 @@ does not declare this. It is there so a reader can see at a glance what a claim 
 
 ````
 ```log
-{"ran_on": {"python": "3.11.4", "device": "cuda", "gpu": "NVIDIA A40", "packages": {"torch": "2.6.0+cu124"}}, "history": {"runs": 43, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "gpu": "NVIDIA A40", "packages": {"torch": "2.6.0+cu124"}}}
 {"call": "58044ec27e7560e4", "fn": "fn:train", "args": {...}, "seed": 1, "seconds": 41.7, "out": {"test_bpc": 2.33, "params": 875585}, "emitted": [{"step": 0, "loss": 6.02, "t": 0.31}, ...]}
 ```
 ````
 
-The runner writes this block, at the end of the paper, when the author runs it. Nobody writes
-it by hand. The first line holds the machine and two counts from the history. Each further line
-is one call: its identity, function, arguments and seed, how long it took, what it returned,
-and what it emitted.
+The author writes this block, at the end of the paper. The first line describes the machine
+the calls ran on. Each further line is one call: its identity, function, arguments and seed,
+how long it took, what it returned, and what it emitted.
 
-The log holds only calls the paper still makes, and only calls that finished.
+- **An entry must be what the paper's function gives.** `out` is what the function returned for
+  those arguments and that seed, and `emitted` is the points it emitted, in order. `reproduce`
+  calls the function itself and compares, so anything else shows up as a mismatch.
+- **`call` may be left out.** It is a hash of the function, arguments, seed and code. An entry
+  without it belongs to the declared call with the same `fn`, `args` and `seed`, and
+  `paper.tidy()` writes the id in. An entry that matches no declared call is an error.
+- **A code change makes every call a new call.** Entries carrying the old ids no longer count,
+  and the claims that read them become open.
 
-`paper.run()` runs every call that is not in the log; `only=[...]` limits it to some
-experiments. It does not run cited papers: `vault.run()` runs a whole vault, cited papers
-first. Several processes may run the same paper at once, for example one per GPU: each takes
-the next call nobody has started, and they do not overwrite each other.
+Beside a vault, in a `logs/` folder that is not committed, `reproduce` keeps the calls it has
+finished on this machine. Nothing else is stored outside the paper.
 
-### The history
+## 2. `verify`
 
-Beside a vault, in a `logs/` folder that is not committed, the tools keep for each paper a
-history: every run ever made for it and every change to a claim's text, in order. It holds
-runs of calls the paper no longer makes, which is how much was tried. Two counts from it are
-written into the paper's log: how many runs were made, and which claims were edited after
-results existed. The same folder holds the calls a reproduction has finished on this machine.
-
-## 2. `check`
-
-`paper.check()` reads a paper and reports. It runs no experiments.
+`paper.verify()` reads a paper and reports. It runs no experiments, and takes the log as given.
 
 **Validity** is a property of the file alone: header fields, block syntax and fields, `stated`
 on every claim, no `seed` or `device` in a call, `challenges=` naming a real claim of a cited
-paper.
+paper, and every log entry belonging to a declared call.
 
-`check` passes if the paper is valid and:
+The report's `problems` are empty if the paper is valid and:
 
 1. Every cited paper, and every paper those cite, is reachable, and matches its pinned code
    hash where a cite gives one.
 2. Every data file of the paper and of the papers it cites is reachable with its stated hash.
 3. No claim raises.
 
-It does not fail on a claim that is open or that fails, or on a call that is not in the log.
+`report.ok` is true if there are no problems and every claim holds. A claim that fails or is
+open is not a problem with the format, but the paper is not ok.
 
 It also reports:
 
@@ -306,13 +304,11 @@ It also reports:
 - how many of the paper's calls are logged;
 - pinned packages whose installed version was different on the machine that wrote the log;
 - claims of other papers in the vault that challenge this paper's claims;
-- from the history: runs made, how many were for calls the paper no longer makes, and claims
-  edited after results existed;
 - lines of code in the paper, and its cites.
 
 ## 3. `reproduce`
 
-`paper.reproduce(time="10m")` reruns a paper on the machine it is called on, within a time
+`paper.reproduce(time="10m", device="cuda")` reruns a paper on the machine it is called on, within a time
 limit, and reports how far it got as counts. It never changes the paper, and cited papers are
 read from their own logs.
 
@@ -330,7 +326,7 @@ What it returns:
 
 | Count | Meaning |
 |---|---|
-| `checked` | whether `check` passed |
+| `verified` | whether `verify` found no problems |
 | `started` of `calls` | calls that began on this machine: data loaded, the function was called |
 | `matched` of `compared` | calls whose first ten points agree with the paper's log |
 | `rerun` of `calls` | calls rerun to the end |

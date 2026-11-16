@@ -1,11 +1,10 @@
 """Paper: one markdown file as a tree of typed parts. Parsing, its namespace, its calls and its log."""
-import fcntl, importlib.metadata, inspect, json, linecache, os, platform, re, socket, sys, time, types
-from contextlib import contextmanager
+import importlib.metadata, inspect, json, linecache, os, platform, re, sys, time, types
 from typing import Annotated, Any, Optional, Union
 import yaml
 from pydantic import Field, PrivateAttr, ValidationError
 from . import records, store
-from .check import PaperChecks
+from .verify import PaperVerify
 from .model import (Cite, Claim, Code, Data, Declared, Entry, Env, Experiments, Header, Local, Log, Outcome, Prose, Strict, sha)
 from .records import Stop, TooLarge, encode, fits
 from .reproduce import PaperReproduce
@@ -52,8 +51,7 @@ def canonical(v):
 
 
 def log_text(log):
-    meta = dict(ran_on=log.ran_on, history=log.history)
-    return "```log\n" + "\n".join([json.dumps(meta)] + [e.model_dump_json(exclude_defaults=True) for e in log.entries]) + "\n```"
+    return "```log\n" + "\n".join([json.dumps(dict(ran_on=log.ran_on))] + [e.model_dump_json(exclude_defaults=True) for e in log.entries]) + "\n```"
 
 
 def parse_block(kind, attrs, body, raw):
@@ -61,7 +59,7 @@ def parse_block(kind, attrs, body, raw):
         return {"cite": Cite, "env": Env, "data": Data}[kind].model_validate({**yaml.safe_load(body), "raw": raw})
     if kind == "log":
         lines = [json.loads(l) for l in body.splitlines() if l.strip()]
-        return Log(ran_on=lines[0].get("ran_on", {}), history=lines[0].get("history", {}), entries=[Entry.model_validate(l) for l in lines[1:]])
+        return Log(ran_on=lines[0].get("ran_on", {}), entries=[Entry.model_validate(l) for l in lines[1:]])
     if attrs == ["experiments"]:
         return Experiments(source=body, raw=raw)
     a = dict(x.split("=", 1) if "=" in x else (x, "") for x in attrs)
@@ -100,12 +98,7 @@ def ran_on(env, device):
     return out
 
 
-def merged(machine, more):
-    """One description of a machine from the descriptions its calls gave."""
-    return {**machine, **more, "packages": {**machine.get("packages", {}), **more.get("packages", {})}}
-
-
-class Paper(Strict, PaperChecks, PaperReproduce):
+class Paper(Strict, PaperVerify, PaperReproduce):
     path: str
     header: Optional[Header] = None
     parts: list[Part] = []
@@ -166,12 +159,12 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         for c in paper._of("cite"):
             try:
                 paper._cited[c.name] = paper._resolve(c)
-            except Unreachable as e:               # reported by check; the paper still loads
+            except Unreachable as e:               # reported by verify; the paper still loads
                 paper._unreachable.append(str(e))
         return paper
 
     def render(self):
-        """The paper as markdown: the prose and blocks as written, and the log as the runner wrote it."""
+        """The paper as markdown: the prose and blocks as written, and the log one JSON line per call."""
         return "".join(p.text if p.kind == "prose" else log_text(p) if p.kind == "log" else p.raw for p in self.parts)
 
     def _of(self, kind):
@@ -185,8 +178,26 @@ class Paper(Strict, PaperChecks, PaperReproduce):
     code = property(lambda self: self._of("code"))
     claims = property(lambda self: self._of("claim"))
     log = property(lambda self: (self._of("log") or [None])[0])
-    logged = property(lambda self: {e.call: e for e in self.log.entries} if self.log else {})
     lines = property(lambda self: sum(len([l for l in c.source.splitlines() if l.strip()]) for c in self.code))
+
+    def _entry_ids(self):
+        """The call id of each log entry, in order. An entry written without one belongs to the
+        declared call with its function, arguments and seed, or to none."""
+        key = lambda fn, args, seed: (fn, json.dumps(args, sort_keys=True), seed)
+        ids = {key("fn:" + d.fn.__name__, d.args, d.seed): d.id for d in self.calls()}
+        return [e.call or ids.get(key(e.fn, e.args, e.seed)) for e in self.log.entries]
+
+    @property
+    def logged(self):
+        """{call id: entry} for the paper's log; entries that belong to no declared call are under None."""
+        if not self.log:
+            return {}
+        return {i: e if e.call else e.model_copy(update={"call": i}) for i, e in zip(self._entry_ids(), self.log.entries)}
+
+    @property
+    def cited_by(self):
+        """The papers in this paper's vault that cite it."""
+        return [p for p in self.vault.papers.values() if any(c.path == self.path for c in p.cites.values())]
 
     @property
     def vault(self):
@@ -274,7 +285,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
 
             def call(name, fn, env=None, seeds=None, **kw):
                 if "device" in kw or "seed" in kw:
-                    raise ValueError(f"call in {name}: `device` and `seed` are set by the runner, not in the call")
+                    raise ValueError(f"call in {name}: `device` and `seed` are set when the call runs, not in the call")
                 args = {k: canonical(v) for k, v in sorted(kw.items())}
                 which = list(seeds) if isinstance(seeds, (list, tuple)) else range(1, seeds + 1) if seeds else [None]
                 made = [Declared(self, name, fn, kw, env, s, args) for s in which]
@@ -295,7 +306,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
                 seen.setdefault(d.id, d)
         return list(seen.values())
 
-    # ---- beside the vault, in logs/ and not committed: the history, and a reproduction's finished calls
+    # ---- beside the vault, in logs/ and not committed: the calls a reproduction has finished here
 
     local_path = property(lambda self: os.path.join(self.dir, "logs", self.stem + ".json"))
 
@@ -311,52 +322,15 @@ class Paper(Strict, PaperChecks, PaperReproduce):
             f.write(self.local.model_dump_json())
         os.replace(self.local_path + ".tmp", self.local_path)
 
-    @contextmanager
-    def locked(self):
-        """Hold this paper's lock and see what other processes have written. Several processes may
-        run one paper at once; each reads and writes the log and the local file only inside this."""
-        os.makedirs(os.path.dirname(self.local_path), exist_ok=True)
-        with open(self.local_path + ".lock", "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                self._local = None
-                yield
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+    # ---- one call, as `reproduce` runs it
 
-    def _disk_log(self):
-        """The log block as it is in the file now, which another process may have just written."""
-        m = re.search(r"^```log\n(.*?)^```[ \t]*$", open(self.path).read(), re.S | re.M)
-        return parse_block("log", [], m.group(1), m.group(0)) if m else None
-
-    def _note(self, **event):
-        self.local.history.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), **event))
-
-    def history_counts(self):
-        h = self.local.history
-        return dict(runs=sum(e["event"] == "run" for e in h),
-                    claims_edited=sorted({e["claim"] for e in h if e["event"] == "claim_edit" and e["after_results"] and not e["first"]}))
-
-    def note_claim_edits(self):
-        """Note in the history any claim whose text changed since it was last noted. Call inside the lock."""
-        last = {}
-        for e in self.local.history:
-            if e["event"] == "claim_edit":
-                last[e["claim"]] = e["hash"]
-        after = any(e["event"] == "run" and e["status"] == "done" for e in self.local.history)
-        for c in self.claims:
-            if last.get(c.id) != c.hash:
-                self._note(event="claim_edit", claim=c.id, hash=c.hash, first=c.id not in last, after_results=after)
-
-    # ---- running it
-
-    def execute(self, d, device, entries=None, max_emits=None, deadline=None):
+    def _execute(self, d, device, entries=None, max_emits=None, deadline=None):
         """Run one call. Nothing is stored here. `entries` is the log to take the outputs of calls
         it uses as arguments from."""
         entries, kw = self.logged if entries is None else entries, {}
         for k, v in d.kw.items():
             if isinstance(v, Declared):        # another call as an argument: its output, run first if it is not logged
-                have = entries.get(v.id) or v.paper.execute(v, device, entries).entry
+                have = entries.get(v.id) or v.paper._execute(v, device, entries).entry
                 v = have.out if have else None
             kw[k] = v
         if d.seed is not None:
@@ -382,56 +356,6 @@ class Paper(Strict, PaperChecks, PaperReproduce):
                       emitted=stream["stream"]) if status == "done" else None
         return Outcome(entry, status, error, stream["stream"], seconds, ran_on(d.env, device))
 
-    def _taken(self, d):
-        """Is another live process already running this call?"""
-        who = self.local.running.get(d.id)
-        if not who:
-            return False
-        host, _, pid = who["owner"].rpartition(":")
-        if host == socket.gethostname():
-            try:
-                os.kill(int(pid), 0)
-            except (OSError, ValueError):
-                return False                       # that process is gone
-            return int(pid) != os.getpid()
-        return time.time() - who["started"] < 24 * 3600
-
-    def run(self, device=None, only=None, say=print):
-        """Run every call that is not in the paper's log, and write the log into the paper.
-
-        The paper file is rewritten: its log block holds what each call returned and emitted. `only`
-        is a list of experiment names to run. Cited papers are not run: use `vault.run()` for a
-        whole vault. Several processes may call this at once, for example one per GPU: each takes
-        the next call nobody has started."""
-        device, done = device or default_device(), []
-        self.tidy()
-        with self.locked():
-            self.note_claim_edits()
-            self.save_local()
-        for d in self.calls(only):
-            with self.locked():                    # take the next call nobody has done or is doing
-                old = self._disk_log()
-                if (old and any(e.call == d.id for e in old.entries)) or self._taken(d):
-                    continue
-                self.local.running[d.id] = dict(owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
-                self.save_local()
-            got = self.execute(d, device)
-            done.append(got)
-            say(f"{self.stem}: {d.name} {json.dumps({k: v for k, v in d.args.items() if not str(v).startswith(('fn:', 'data:'))})}"
-                f" seed={d.seed} {got.status} in {got.seconds}s" + (f" ({got.error})" if got.error else ""))
-            with self.locked():                    # add it to whatever the log holds now
-                self.local.running.pop(d.id, None)
-                self._note(event="run", experiment=d.name, call=d.id, args=d.args, seed=d.seed, status=got.status, seconds=got.seconds)
-                self.save_local()
-                if got.entry:
-                    old = self._disk_log()
-                    kept = {e.call: e for e in old.entries} if old else {}
-                    kept[d.id] = got.entry
-                    order = [x.id for x in self.calls()]                         # only calls the paper still makes
-                    self._write_log(Log(ran_on=merged(old.ran_on if old else {}, got.machine), history=self.history_counts(),
-                                        entries=[kept[i] for i in order if i in kept]))
-        return done
-
     def _write_log(self, log):
         parts = []
         for p in self.parts:
@@ -452,7 +376,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
 
     def tidy(self):
         """Rewrite the parts of the file that are derived from the rest: the line of links to the
-        papers it cites. Returns whether the file changed."""
+        papers it cites, and the id of any log entry written without one. Returns whether the file changed."""
         cites = self._of("cite")
         line = "Cites: " + ", ".join(f"[{os.path.basename(c.at)[:-3]}]({c.at[2:] if c.at.startswith('./') else c.at})" for c in cites) + "\n"
         first = self.parts[0] if self.parts and self.parts[0].kind == "prose" else None
@@ -463,9 +387,15 @@ class Paper(Strict, PaperChecks, PaperReproduce):
             m = re.match(r"---\n.*?\n---\n\n?", text, re.S)
             at = m.end() if m else 0
             text = text[:at] + line + "\n" + text[at:]
-        if text == first.text:
-            return False
         self.parts[0] = Prose(text=text)
+        if self.log and any(e.call is None for e in self.log.entries):
+            try:
+                ids = {id(e): i for i, e in zip(self._entry_ids(), self.log.entries)}
+            except Exception:              # the paper does not build: verify reports why
+                ids = {}
+            self.log.entries = [e if e.call or not ids.get(id(e)) else e.model_copy(update={"call": ids[id(e)]}) for e in self.log.entries]
+        if self.render() == self._text:
+            return False
         self._text = self.render()
         with open(self.path, "w") as f:
             f.write(self._text)

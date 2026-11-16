@@ -53,12 +53,15 @@ class Vault:
     def __len__(self):
         return len(self.papers)
 
-    def check(self):
-        return {name: p.check() for name, p in self.papers.items()}
+    def verify(self):
+        """{name: Report} for every paper, cited papers first."""
+        return {name: p.verify() for name, p in self.papers.items()}
 
-    def run(self, device=None, say=print):
-        """Run every paper, cited papers first."""
-        return [got for p in self for got in p.run(device, say=say)]
+    def claims(self, status=None):
+        """{"paper.claim": status} for every claim in the vault, or only those with one status
+        ("holds", "fails" or "open")."""
+        found = {f"{name}.{c}": s for name, r in self.verify().items() for c, s in r.claims.items()}
+        return {k: s for k, s in found.items() if status is None or s.split()[0].rstrip(":") == status}
 
     def tidy(self):
         """Bring every paper's derived parts up to date. Returns the names of the papers that changed."""

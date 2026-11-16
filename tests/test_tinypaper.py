@@ -1,9 +1,10 @@
 """Tests on a toy vault that needs only numpy. Run with pytest, or directly with python."""
-import hashlib, os, re, shutil, subprocess, sys, tempfile
+import hashlib, os, re, shutil, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tinypaper as tp
 from tinypaper import store
+from tinypaper.model import Log
 
 A = '''---
 title: Toy root
@@ -149,7 +150,19 @@ def paper(path):
 
 
 def run(path):
-    return paper(path).run(device="cpu", say=quiet)
+    """Stand in for an author: run every call the log lacks, any way at all, and write the log into
+    the paper. TinyPaper has no runner; this uses the step `reproduce` is built on."""
+    p = paper(path)
+    kept, got, machine = dict(p.logged), [], dict(p.log.ran_on) if p.log else {}
+    for d in p.calls():
+        if d.id not in kept:
+            got.append(p._execute(d, "cpu", kept))
+            machine = {**machine, **got[-1].machine}
+            if got[-1].entry:
+                kept[d.id] = got[-1].entry
+    if got:
+        p._write_log(Log(ran_on=machine, entries=[kept[d.id] for d in p.calls() if d.id in kept]))
+    return got
 
 
 def test_parse_and_render():
@@ -164,74 +177,68 @@ def test_parse_and_render():
     assert any("unknown attribute" in x for x in paper(a).problems)
 
 
-def test_run_and_check():
+def test_log_and_verify():
     d, a, b = setup()
-    rep = paper(a).check()
-    assert rep.ok and (rep.calls, rep.logged) == (6, 0) and rep.claims["c1"].startswith("open"), rep.problems
+    rep = paper(a).verify()
+    assert rep.valid and not rep.ok and (rep.calls, rep.logged) == (6, 0) and rep.claims["c1"].startswith("open"), rep.problems
     assert len(paper(a).declared()) == 8 and len(paper(a).calls()) == 6       # two experiments share two calls
     assert len(run(a)) == 6
     p = paper(a)
     assert len(p.log.entries) == 6 and "```log" in open(a).read()
     big = [e for e in p.log.entries if e.args.get("scale") == 2][0]
     assert big.out == {"mean": 4.0, "top": 6.0} and len(big.emitted) == 20 and big.emitted[0]["step"] == 0
-    rep = p.check()
+    rep = p.verify()
     assert rep.ok and rep.claims == dict(c1="holds", c2="holds") and rep.logged == 6, rep.problems
     assert rep.compares == {"c1": ["scale"], "c2": ["fn"]} and any("numpy" in m for m in rep.ran_differently)
-    assert rep.history["runs"] == 6 and p.log.history["runs"] == 6 and run(a) == []
+    assert run(a) == []
     assert tp.Paper.parse(open(a).read(), a).render() == open(a).read()
     rep.text()
-    shutil.rmtree(os.path.join(d, "toy", "logs"))                 # a clone has the paper and nothing else
-    tp.paper.PAPERS.clear()
-    rep = paper(a).check()
-    assert rep.ok and rep.claims["c1"] == "holds" and rep.history["runs"] == 6
 
 
-def test_code_change_and_history():
+def test_code_change():
     d, a, b = setup()
     run(a)
     edit(a, "d.x * 10", "d.x * 20")                               # new code: every call is a different call
-    rep = paper(a).check()
+    rep = paper(a).verify()
     assert rep.logged == 0 and all(s.startswith("open") for s in rep.claims.values())
     run(a)
-    rep = paper(a).check()
-    assert rep.claims["c2"] == "fails" and rep.history["runs"] == 12 and rep.history["no_longer_made"] == 6
-    edit(a, "== 60.0", "== 120.0")                                # edit a claim after seeing the result
-    run(a)
-    rep = paper(a).check()
-    assert rep.claims["c2"] == "holds" and rep.history["claims_edited"] == ["c2"]
+    rep = paper(a).verify()
+    assert rep.claims["c2"] == "fails" and not rep.ok and not rep.problems     # a failing claim is not a format problem
+    edit(a, "== 60.0", "== 120.0")
+    rep = paper(a).verify()
+    assert rep.claims["c2"] == "holds" and rep.ok                 # a claim is not code a call depends on: the log stands
     assert len(paper(a).log.entries) == 6                         # the log holds only the calls the paper makes
 
 
 def test_invalid_and_too_large():
     d, a, b = setup()
     edit(a, "    return dict(w=d.x * 10)", "    return dict(w=d.x * 10, raw=list(range(20000)))")
-    said = []
-    paper(a).run(device="cpu", say=said.append)
+    said = [g.error for g in run(a) if g.error]
     assert any("the limit is" in s and "summary" in s for s in said)
-    rep = paper(a).check()
+    rep = paper(a).verify()
     assert rep.logged == 4 and rep.claims["c2"].startswith("open")
     edit(a, 'call("big", fit, d=nums, scale=2', 'call("big", fit, device="cuda", d=nums, scale=2')
-    rep = paper(a).check()
+    rep = paper(a).verify()
     assert not rep.valid and any("device" in x for x in rep.problems)
 
 
 def test_unreachable():
     d, a, b = setup()
     run(a), run(b)
-    assert paper(b).check().claims["not_so"] == "holds"
+    assert paper(b).verify().claims["not_so"] == "holds"
     os.remove(os.path.join(d, "nums.txt"))                        # the data's URL is dead, the cache still has it
-    assert paper(b).check().ok
+    assert paper(b).verify().ok
     shutil.rmtree(os.path.join(d, "cache"))
-    rep = paper(b).check()
+    rep = paper(b).verify()
     assert not rep.ok and any("data file" in x for x in rep.problems)
     open(os.path.join(d, "nums.txt"), "w").write("1\n2\n3\n")
     edit(b, "at: ./a.md", "at: ./a.md\ncode: abcd")
-    rep = paper(b).check()
+    rep = paper(b).verify()
     assert not rep.ok and "pinned" in rep.problems[0]
     edit(b, "code: abcd", "code: '" + paper(a).code_hash + "'")
-    assert paper(b).check().ok
+    assert paper(b).verify().ok
     os.rename(a, a + ".gone")
-    rep = paper(b).check()
+    rep = paper(b).verify()
     assert not rep.ok and "unreachable" in rep.problems[0]
 
 
@@ -239,11 +246,14 @@ def test_challenges_and_vault():
     d, a, b = setup("abc")
     v = tp.Vault(os.path.dirname(a))
     assert v.name == "toy" and list(v.papers) == ["a", "b", "c"] and v["a"].path == a
-    assert paper(a).check().challenged_by == [dict(paper="b.md", claim="not_so", challenges="c1")]
+    assert paper(a).verify().challenged_by == [dict(paper="b.md", claim="not_so", challenges="c1")]
     assert v.tidy() == ["b", "c"] and v.tidy() == [] and "\nCites: [a](a.md)\n" in open(b).read()
-    v.run(device="cpu", say=quiet)
-    reports = v.check()
+    for x in v:
+        run(x.path)
+    reports = v.verify()
     assert all(r.ok for r in reports.values()) and reports["c"].claims == {"only": "holds"}
+    assert [x.stem for x in v["a"].cited_by] == ["b", "c"] and v["c"].cited_by == []
+    assert v.claims("holds") == {"a.c1": "holds", "a.c2": "holds", "b.not_so": "holds", "c.only": "holds"} and v.claims("fails") == {}
     r = v["c"].reproduce(device="cpu", say=quiet)                 # a paper with no calls: its claims read the cited logs
     assert r.claims == {"only": "holds"} and (r.calls, r.rerun) == (0, 0), r
 
@@ -251,15 +261,14 @@ def test_challenges_and_vault():
 def test_reproduce():
     d, a, b = setup()
     run(a)
-    shutil.rmtree(os.path.join(d, "toy", "logs"))                 # reproduce from the paper alone
-    tp.paper.PAPERS.clear()
+    assert not os.path.exists(os.path.join(d, "toy", "logs"))     # the author left nothing beside the paper
     r = paper(a).reproduce(time=0.0, device="cpu", say=quiet)     # no time: nothing is started
-    assert r.checked and r.started == 0 and r.claims["c1"].startswith("not attempted"), r
+    assert r.verified and r.started == 0 and r.claims["c1"].startswith("not attempted"), r
     r = paper(a).reproduce(device="cpu", full=False, say=quiet)   # the first points only
     assert (r.started, r.compared, r.matched, r.attempted) == (6, 4, 4, 0) and r.rerun == 2, r   # two calls emit nothing, so they finished
     r = paper(a).reproduce(time="10m", device="cpu", say=quiet)   # continue the same rerun
     assert r.rerun == 6 and r.claims == dict(c1="holds", c2="holds") and r.needed == 0 and (r.points, r.points_agree) == (80, 80), r
-    assert len(paper(a).log.entries) == 6 and paper(a).check().ok       # the paper itself is untouched
+    assert len(paper(a).log.entries) == 6 and paper(a).verify().ok       # the paper itself is untouched
     old = re.search(r'"emitted":\[\{"step":0,"loss":[^,]+,', open(a).read()).group(0)
     edit(a, old, '"emitted":[{"step":0,"loss":0.123,')            # a logged point the rerun does not give
     r = paper(a).reproduce(device="cpu", say=quiet)
@@ -267,27 +276,22 @@ def test_reproduce():
     r.text()
 
 
-WORKER = '''
-import sys
-sys.path.insert(0, sys.argv[1])
-import tinypaper as tp
-tp.store.CACHE = sys.argv[3]
-print(len(tp.Paper.load(sys.argv[2]).run(device="cpu", say=lambda *a: None)))
-'''
-
-
-def test_parallel_runs():
+def test_log_written_by_hand():
     d, a, b = setup()
-    edit(a, "    rng = np.random.default_rng(seed)\n", "    rng = np.random.default_rng(seed)\n    import time\n    time.sleep(0.4)\n")
-    paper(a).load_data("nums")                                    # fetch the data once, before the workers start
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    workers = [subprocess.Popen([sys.executable, "-c", WORKER, root, a, store.CACHE], stdout=subprocess.PIPE, text=True) for _ in range(3)]
-    counts = [int(w.communicate()[0].strip().splitlines()[-1]) for w in workers]
-    tp.paper.PAPERS.clear()
+    run(a)
+    full = open(a).read()
+    edit(a, full[full.index("```log"):], re.sub(r'"call":"[0-9a-f]+",', "", full[full.index("```log"):]))    # entries without ids
     p = paper(a)
-    runs = [e for e in p.local.history if e["event"] == "run"]
-    assert sum(counts) == 6 and len(runs) == 6 and len({e["call"] for e in runs}) == 6, (counts, len(runs))    # each call ran once
-    assert len(p.log.entries) == 6 and p.check().ok and max(counts) < 6, counts                               # and the work was shared
+    assert all(e.call is None for e in p.log.entries)
+    rep = p.verify()
+    assert rep.ok and rep.logged == 6 and rep.claims == dict(c1="holds", c2="holds") and rep.notes, rep.problems
+    r = p.reproduce(device="cpu", full=False, say=quiet)
+    assert (r.compared, r.matched) == (4, 4), r
+    assert p.tidy() and open(a).read() == full and not paper(a).tidy()         # tidy writes the ids in
+    edit(a, '"fn":"fn:use","args":{"init"', '"fn":"fn:use","args":{"other":1,"init"')
+    edit(a, re.search(r'"call":"[0-9a-f]+","fn":"fn:use"', open(a).read()).group(0), '"fn":"fn:use"')
+    rep = paper(a).verify()
+    assert not rep.ok and any("matches no call" in x for x in rep.problems)     # an entry for a call the paper does not make
 
 
 def test_cite_from_another_vault():
@@ -295,10 +299,10 @@ def test_cite_from_another_vault():
     elsewhere = os.path.join(d, "elsewhere.md")
     shutil.move(a, elsewhere)                                     # the cited paper lives in another vault
     edit(b, "at: ./a.md", f"at: ./a.md\nsource: file://{elsewhere}")
-    rep = paper(b).check()
-    assert rep.ok and os.path.exists(a), rep.problems             # it was copied into this vault
+    rep = paper(b).verify()
+    assert not rep.problems and os.path.exists(a), rep.problems             # it was copied into this vault
     edit(b, "at: ./a.md", "at: https://example.org/a.md")
-    assert "local path" in paper(b).check().problems[0]
+    assert "local path" in paper(b).verify().problems[0]
 
 
 def test_source():

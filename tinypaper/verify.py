@@ -1,6 +1,5 @@
-"""paper.check(): is the paper well formed, can it be rerun, and what does its log say?"""
+"""paper.verify(): is the paper well formed, can it be rerun, and which claims hold on its log?"""
 import os
-from typing import Any
 from .model import Strict
 from .records import differ, evaluate
 from .store import Unreachable, data_file
@@ -8,7 +7,7 @@ from .store import Unreachable, data_file
 
 class Report(Strict):
     paper: str
-    ok: bool = False                       # nothing is wrong or unreachable
+    ok: bool = False                       # nothing is wrong or unreachable, and every claim holds
     valid: bool = False                    # the file follows the format
     problems: list[str] = []
     claims: dict[str, str] = {}            # each claim's status on the paper's log
@@ -17,9 +16,9 @@ class Report(Strict):
     logged: int = 0                        # how many of them are in its log
     ran_differently: list[str] = []
     challenged_by: list[dict[str, str]] = []
-    history: dict[str, Any] = {}
     lines: int = 0
     cites: list[str] = []
+    notes: list[str] = []
 
     def text(self):
         out = [f"{os.path.basename(self.paper)}: {'ok' if self.ok else 'NOT OK'}"]
@@ -30,13 +29,9 @@ class Report(Strict):
         for c, status in self.claims.items():
             how = self.compares.get(c)
             out.append(f"  {c}: {status}" + (f" (compares calls that differ in {', '.join(how)})" if how else ""))
+        out += ["  note: " + n for n in self.notes]
         out += ["  ran differently: " + m for m in self.ran_differently]
         out += [f"  challenged: claim {c['challenges']} by {c['paper']} claim {c['claim']}" for c in self.challenged_by]
-        h = self.history
-        if h.get("runs"):
-            out.append(f"  history: {h['runs']} runs made"
-                       + (f", {h['no_longer_made']} of them for calls the paper no longer makes" if h.get("no_longer_made") else "")
-                       + (f"; claims edited after results existed: {', '.join(h['claims_edited'])}" if h.get("claims_edited") else ""))
         return "\n".join(out)
 
 
@@ -62,13 +57,13 @@ def version_mismatch(envs, where):
     return sorted(found)
 
 
-class PaperChecks:
-    def check(self):
-        """Check the paper. Runs nothing.
+class PaperVerify:
+    def verify(self):
+        """Verify the paper. Runs nothing.
 
         It fails if the paper breaks the format, if something needed to rerun it is unreachable (a
-        cited paper, a data file), or if a claim raises. Claims are evaluated on the paper's log; a
-        cited paper is read from its own log."""
+        cited paper, a data file), or if a claim does not hold. Claims are evaluated on the paper's
+        log, which is taken as given; a cited paper is read from its own log."""
         report = Report(paper=self.path)
         problems = report.problems
         if self._unreachable:
@@ -98,6 +93,10 @@ class PaperChecks:
                         problems.append(f"unreachable: {e}")
         logged = self.logged
         report.calls, report.logged = len(calls), sum(d.id in logged for d in calls)
+        if None in logged:
+            problems.append("invalid: the log has an entry that matches no call the paper declares (its fn, args and seed)")
+        if self.log and any(e.call is None for e in self.log.entries):
+            report.notes.append("some log entries have no call id; paper.tidy() writes them in")
         if self.log:
             report.ran_differently = version_mismatch({d.env.name: d.env for d in declared if d.env}.values(), self.log.ran_on)
         for c in self.claims:
@@ -107,15 +106,10 @@ class PaperChecks:
                 report.compares[c.id] = differ(read)
             if status.startswith("error"):
                 problems.append(f"claim {c.id} raised an error: {status[7:]}")
-        if self.local.history:
-            now = {d.id for d in calls}
-            report.history = dict(self.history_counts(), no_longer_made=sum(e["event"] == "run" and e["call"] not in now for e in self.local.history))
-        elif self.log:
-            report.history = dict(self.log.history)        # no local history here: what the paper's log recorded
         report.lines = self.lines
         report.cites = sorted(os.path.basename(p.path) for p in self.cites.values())
         report.challenged_by = self.challenges()
-        report.ok = not problems
+        report.ok = not problems and all(s == "holds" for s in report.claims.values())
         return report
 
     def challenges(self):

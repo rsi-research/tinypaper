@@ -1,4 +1,4 @@
-name: check papers
+name: verify papers
 
 # Runs on every push and pull request. It executes the code in the papers, so it is given no
 # secrets and read-only access. Do not add secrets to this job, and do not switch it to
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -26,5 +26,5 @@ jobs:
         run: pip install --quiet -e .
       - name: Test the tools
         run: python tests/test_tinypaper.py
-      - name: Check and rerun the papers this change touches
+      - name: Verify and reproduce the papers this change touches
         run: python -m tinypaper.ci example-vault --time 2m

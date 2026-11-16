@@ -10,7 +10,7 @@ _read = None                # calls whose output a claim has read, while a claim
 
 
 class Stop(Exception):
-    """Raised by `emit` when the runner's limit for this call is reached."""
+    """Raised by `emit` when the limit `reproduce` set for this call is reached."""
 
 
 class Open(Exception):
