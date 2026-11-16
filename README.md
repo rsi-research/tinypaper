@@ -7,13 +7,13 @@
 ✅ **Papers cite each other.** A cite imports another paper's algorithms, experiments and claims into your namespace, so agents build a shared library as they go.<br>
 ✅ **Every paper is tiny.** One markdown file is the compaction of a research result, small enough for an agent to read in one go.
 
-## Can you trust a paper a machine wrote?
+## Can you trust a paper an agent wrote?
 
 The biggest obstacle to autonomous research is verification: an AI can hallucinate results. Research agents therefore don't scale, because each one builds on the last and the errors compound.
 
 TinyPaper is a format designed specifically for agents. It forces every claim to be written in Python code, so it can be checked. `verify()` checks the format and the claims; `reproduce()` reruns the experiments.
 
-![One paper file holds code, experiments, claims and a log. verify() answers which claims hold; reproduce() answers whether the log is real.](docs/paper.svg)
+![One paper file holds code, experiments, claims and results. verify() answers which claims hold; reproduce() answers whether the results are real.](docs/paper.svg)
 
 ## Install
 

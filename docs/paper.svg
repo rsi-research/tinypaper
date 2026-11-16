@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 448" role="img" aria-label="One file in, two questions answered">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 44 760 404" role="img" aria-label="A tiny paper, verify and reproduce">
 <style>
 .ink{fill:#1f2328}.quiet{fill:#59636e}.edge{stroke:#a8a59a;fill:none;stroke-width:1.25}.head{fill:#a8a59a}
 .acc{stroke:#2a78d6}.accf{fill:#2a78d6}.good{fill:#1a9f2d}.bad{fill:#d1383d}.bg{fill:#ffffff}
@@ -8,7 +8,6 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head"/></marker></defs>
 <rect class="bg" width="760" height="448"/>
-<text x="24" y="34" class="ink t">One file in, two questions answered</text>
 <rect x="24" y="64" width="208" height="296" rx="8" class="accf" fill-opacity="0.12" stroke-width="0"/><rect x="24" y="64" width="208" height="296" rx="8" class="acc" fill="none" stroke-width="2"/>
 <text x="40" y="86" class="ink b mono">paper.md</text>
 <rect x="40" y="96" width="176" height="56" rx="8" class="edge"/>
@@ -21,8 +20,8 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 <text x="56" y="249" class="ink b">claims</text>
 <text x="56" y="266" class="quiet s">functions that return true</text>
 <rect x="40" y="288" width="176" height="56" rx="8" class="edge"/>
-<text x="56" y="313" class="ink b">log</text>
-<text x="56" y="330" class="quiet s">what each call gave</text>
+<text x="56" y="313" class="ink b">results</text>
+<text x="56" y="330" class="quiet s">loss, accuracy, metrics</text>
 <line x1="128" y1="360" x2="128" y2="384" class="edge"/><rect x="24" y="384" width="208" height="40" rx="8" class="edge" stroke-dasharray="4 4"/>
 <text x="128" y="408" class="quiet" text-anchor="middle">papers it cites</text>
 <text x="138" y="376" class="quiet s">cites</text>
@@ -30,9 +29,9 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 <text x="361" y="146" class="ink b mono" text-anchor="middle">reproduce()</text>
 <text x="361" y="174" class="quiet s" text-anchor="middle">reruns on your machine</text>
 <text x="361" y="274" class="ink b mono" text-anchor="middle">verify()</text>
-<text x="361" y="302" class="quiet s" text-anchor="middle">seconds, runs nothing</text>
+<text x="361" y="302" class="quiet s" text-anchor="middle">seconds, no experiments run</text>
 <rect x="472" y="100" width="264" height="112" rx="8" class="edge"/>
-<text x="488" y="124" class="ink b">Is the log real?</text>
+<text x="488" y="124" class="ink b">Are the results real?</text>
 <path d="M488 146C510 176 550 186 600 188" class="edge"/>
 <circle cx="488" cy="146" r="3.5" class="accf"/>
 <circle cx="508" cy="165" r="3.5" class="accf"/>
@@ -41,7 +40,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 <circle cx="600" cy="188" r="3.5" class="accf"/>
 <circle cx="628" cy="172" r="3.5" class="accf"/>
 <line x1="620" y1="152" x2="636" y2="152" class="edge"/>
-<text x="644" y="156" class="quiet s">the log</text>
+<text x="644" y="156" class="quiet s">reported</text>
 <text x="644" y="176" class="quiet s">your rerun</text>
 <text x="620" y="200" class="ink s">match to 0.1%</text>
 <rect x="472" y="228" width="264" height="112" rx="8" class="edge"/>
