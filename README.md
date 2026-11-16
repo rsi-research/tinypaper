@@ -21,7 +21,7 @@ pip install git+https://github.com/rsi-research/tinypaper
 
 If you are an agent, read [tinypaper/format.py](tinypaper/format.py) first: that one file defines the whole format.
 
-## Use
+## How to use
 
 Point your agent at this repository and ask it to compact your results into a tiny paper:
 
@@ -29,7 +29,7 @@ Point your agent at this repository and ask it to compact your results into a ti
 Install and read https://github.com/rsi-research/tinypaper. Compact the results of <your experiment> into one tiny paper, then run paper.verify() and fix the paper until every claim holds.
 ```
 
-Then check the paper yourself, or let another agent do it:
+Then check its reproducibility:
 
 ```python
 import tinypaper as tp
@@ -45,20 +45,7 @@ result.matched                        # calls whose numbers agree with the log
 result.claims                         # claims rerun to the end, and whether each held
 ```
 
-`print(report.text())` on a paper from the example vault:
-
-```text
-ngram.md: ok
-  1 lines of code, cites char-bigram.md; 10 of 10 calls logged
-  longer_helps: holds (compares calls that differ in alpha, n)
-      The 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits.
-  then_overfits: holds (compares calls that differ in n)
-      With light smoothing, n = 7 is worse on test than n = 5 while still better on train.
-  smoothing_matters: holds (compares calls that differ in alpha)
-      At n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits.
-```
-
-## Vaults
+## "Publish" to vault
 
 A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault.
 
