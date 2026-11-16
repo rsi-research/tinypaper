@@ -23,6 +23,8 @@ name: mlp
 at: ./mlp-lm.md
 ```
 
+**Code `model`**
+
 ```python code=model
 import torch
 from base import bpc
@@ -44,15 +46,21 @@ def gru(vocab, **kw):
     return GRU(vocab, **kw)
 ```
 
+**Experiments**
+
 ```python experiments
 call("gru", train, d=base.text, make=gru, ctx=128, steps=3000, seeds=2, env=base.cpu)
 ```
 
+**Claim `beats_window`** (stated 2026-11-15): The GRU beats the 8-character MLP by more than 0.1 bits per character.
+
 ```python claim=beats_window stated=2026-11-15
 def beats_window(r):
-    # the GRU beats the 8-character MLP by more than 0.1 bits per character
+    """The GRU beats the 8-character MLP by more than 0.1 bits per character."""
     return bpc(r.mlp.mlp.where(k=8)) - bpc(r.gru) > 0.1
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

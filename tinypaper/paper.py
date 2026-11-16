@@ -357,7 +357,8 @@ class Paper(Strict, PaperVerify, PaperReproduce):
 
     def tidy(self):
         """Rewrite the parts of the file that are derived from the rest: the line of links to the
-        papers it cites, and the id of any log entry written without one. Returns whether the file changed."""
+        papers it cites, the label above each block, and the id of any log entry written without one.
+        Returns whether the file changed."""
         cites = self._of("cite")
         line = "Cites: " + ", ".join(f"[{os.path.basename(c.at)[:-3]}]({c.at[2:] if c.at.startswith('./') else c.at})" for c in cites) + "\n"
         first = self.parts[0] if self.parts and self.parts[0].kind == "prose" else None
@@ -369,6 +370,7 @@ class Paper(Strict, PaperVerify, PaperReproduce):
             at = m.end() if m else 0
             text = text[:at] + line + "\n" + text[at:]
         self.parts[0] = Prose(text=text)
+        self.parts = fmt.labelled(self.parts)
         if self.log and any(e.call is None for e in self.log.entries):
             try:
                 ids = {id(e): i for i, e in zip(self._entry_ids(), self.log.entries)}

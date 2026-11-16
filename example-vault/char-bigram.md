@@ -32,6 +32,8 @@ files:
     sha256: 86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed
 ```
 
+**Code `load`**
+
 ```python code=load
 from dataclasses import dataclass
 import torch
@@ -57,6 +59,8 @@ def load(files):
     return Text(train=ids[:a], val=ids[a:b], test=ids[b:], vocab=vocab,
                 units=torch.ones(len(vocab), dtype=torch.long), skip=256)
 ```
+
+**Code `count`**
 
 ```python code=count
 def part(d, name):
@@ -91,6 +95,8 @@ def ngram(d, n, alpha=1.0):
     return summary({name: bits(part(d, name)) for name in ["test", "val", "train"]}, d)
 ```
 
+**Code `metric`**
+
 ```python code=metric
 from statistics import mean
 
@@ -117,22 +123,30 @@ def bpc(runs, split="test"):
     return mean(x.out[split + "_bpc"] for x in runs)
 ```
 
+**Experiments**
+
 ```python experiments
 call("unigram", ngram, d=text, n=1, env=cpu)
 call("bigram", ngram, d=text, n=2, env=cpu)
 ```
 
+**Claim `c1`** (stated 2026-11-15): Knowing the previous character saves more than one bit per character.
+
 ```python claim=c1 stated=2026-11-15
 def c1(r):
-    # knowing the previous character saves more than one bit per character
+    """Knowing the previous character saves more than one bit per character."""
     return bpc(r.unigram) - bpc(r.bigram) > 1.0
 ```
 
+**Claim `c2`** (stated 2026-11-15): The bigram costs under 3.7 bits per character.
+
 ```python claim=c2 stated=2026-11-15
 def c2(r):
-    # the bigram costs under 3.7 bits per character
+    """The bigram costs under 3.7 bits per character."""
     return bpc(r.bigram) < 3.7
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

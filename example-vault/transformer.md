@@ -25,6 +25,8 @@ name: rnn
 at: ./rnn.md
 ```
 
+**Code `model`**
+
 ```python code=model
 import torch
 from base import bpc
@@ -73,15 +75,21 @@ def transformer(vocab, **kw):
     return Transformer(vocab, **kw)
 ```
 
+**Experiments**
+
 ```python experiments
 call("transformer", train, d=base.text, make=transformer, ctx=128, steps=3000, lr=1e-3, seeds=2, env=base.cpu)
 ```
 
+**Claim `beats_rnn`** (stated 2026-11-15): At 3000 steps the transformer is more than 0.05 bits per character better than the GRU.
+
 ```python claim=beats_rnn stated=2026-11-15
 def beats_rnn(r):
-    # at 3000 steps the transformer is more than 0.05 bits per character better than the GRU
+    """At 3000 steps the transformer is more than 0.05 bits per character better than the GRU."""
     return bpc(r.rnn.gru) - bpc(r.transformer) > 0.05
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

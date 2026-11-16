@@ -38,6 +38,8 @@ from: base.text
 args: { merges: 256 }
 ```
 
+**Code `tokenise`**
+
 ```python code=tokenise
 import torch
 from base import ngram, bpc, Text
@@ -84,30 +86,40 @@ def tokenise(d, merges):
                 units=torch.tensor([len(v) for v in vocab]), skip=len(head))
 ```
 
+**Experiments**
+
 ```python experiments
 call("bigram_tok0", ngram, d=tok0, n=2, env=base.cpu)
 call("chars", ngram, d=tok0, n=2, alpha=0.03, env=base.cpu)
 call("tokens", ngram, d=tok256, n=2, alpha=0.03, env=base.cpu)
 ```
 
+**Claim `bridge`** (stated 2026-11-15): With zero merges, the token bigram scores exactly what the root paper reports for its bigram.
+
 ```python claim=bridge stated=2026-11-15
 def bridge(r):
-    # zero merges: exactly the score the root paper reports for its bigram
+    """With zero merges, the token bigram scores exactly what the root paper reports for its bigram."""
     return r.bigram_tok0[0].out["test_bpc"] == r.base.bigram[0].out["test_bpc"]
 ```
 
+**Claim `coverage`** (stated 2026-11-15): A test token covers over 1.8 characters on average.
+
 ```python claim=coverage stated=2026-11-15
 def coverage(r):
-    # a claim about data, with no run behind it: a test token covers over 1.8 characters on average
+    """A test token covers over 1.8 characters on average."""
     ids = tok256.test[tok256.skip:]
     return tok256.units[ids].float().mean().item() > 1.8
 ```
 
+**Claim `tokens_help`** (stated 2026-11-15): A bigram over tokens beats a bigram over characters by over half a bit per character.
+
 ```python claim=tokens_help stated=2026-11-15
 def tokens_help(r):
-    # a bigram over tokens beats a bigram over characters by over half a bit per character
+    """A bigram over tokens beats a bigram over characters by over half a bit per character."""
     return bpc(r.chars) - bpc(r.tokens) > 0.5
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

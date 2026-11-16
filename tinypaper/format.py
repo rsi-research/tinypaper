@@ -16,7 +16,9 @@ for people and is never evidence. `EXAMPLE` below is a complete paper.
 
 cite, env and data blocks are YAML with exactly the fields of their class; an unknown field is
 an error. Any other fence (```python with no attribute, ```bash, ...) is ordinary prose.
-Blocks may come in any order, except that the log is last. A paper with no log yet is valid:
+A markdown viewer hides the words after ```python, so paper.tidy() writes a label line above
+each code, experiments, claim and log block (for example **Claim `larger_is_faster`**, with its
+statement). Do not write those lines yourself. Blocks may come in any order, except that the log is last. A paper with no log yet is valid:
 its claims are open. A line starting with ``` always ends a block, so never write one inside.
 
 Cite names, env names, data names and everything the code defines share one namespace, and
@@ -70,6 +72,7 @@ for lr in [0.01, 0.1]:
 
 ```python claim=larger_is_faster stated=2026-11-16
 def larger_is_faster(r):
+    """After 50 steps, a step size of 0.1 reaches a lower loss than 0.01."""
     mean = lambda calls: sum(c.out["final_loss"] for c in calls) / len(calls)
     return mean(r.sweep.where(lr=0.1)) < mean(r.sweep.where(lr=0.01))
 ```
@@ -269,10 +272,14 @@ class Claim(Block):
 
         ```python claim=larger_is_faster stated=2026-11-16
         def larger_is_faster(r):
+            'A step size of 0.1 reaches a lower loss than 0.01.'
             return r.sweep.where(lr=0.1)[0].out["final_loss"] < r.sweep.where(lr=0.01)[0].out["final_loss"]
         ```
 
-    The function has the claim's id as its name and takes one argument, r:
+    The function has the claim's id as its name and takes one argument, r. Its docstring is
+    the claim in words: one sentence a reader can check against the code. verify prints it
+    beside the claim's status.
+
         r.<experiment>              that experiment's logged calls, in the order they were declared
         r.<experiment>.where(lr=0.1)    those whose arguments, as written in the call, have these values
         r.<cite>.<experiment>       a cited paper's calls, read from that paper's own log
@@ -297,6 +304,16 @@ class Claim(Block):
     @property
     def hash(self):
         return sha(self.source)[:16]
+
+    @property
+    def statement(self):
+        """The claim in words: the docstring of its function."""
+        import ast
+        try:
+            return next((" ".join(ast.get_docstring(n).split()) for n in ast.parse(self.source).body
+                         if isinstance(n, ast.FunctionDef) and ast.get_docstring(n)), "")
+        except SyntaxError:
+            return ""
 
 
 class Entry(Strict):
@@ -431,3 +448,32 @@ def log_text(log):
 def render(parts):
     """Parts back to markdown: prose and blocks as written, and the log one JSON line per call."""
     return "".join(p.text if p.kind == "prose" else log_text(p) if p.kind == "log" else p.raw for p in parts)
+
+
+LABEL = re.compile(r"(?:^|(?<=\n))\*\*(?:Code|Experiments|Claim|Log)\b[^\n]*\n\n?\Z")
+
+
+def label(part):
+    """The line `tidy` writes above a block, so a markdown viewer shows what kind of block it is."""
+    if part.kind == "code":
+        return f"**Code `{part.name}`**"
+    if part.kind == "experiments":
+        return "**Experiments**"
+    if part.kind == "claim":
+        return f"**Claim `{part.id}`** (stated {part.stated}" + (f", challenges `{part.challenges}`" if part.challenges else "") + ")" \
+            + (": " + part.statement if part.statement else "")
+    if part.kind == "log":
+        return "**Log**"
+
+
+def labelled(parts):
+    """The parts with every label line brought up to date."""
+    out = []
+    for p in parts:
+        want = None if p.kind == "prose" else label(p)
+        if want:
+            before = LABEL.sub("", out.pop().text if out and out[-1].kind == "prose" else "").rstrip("\n")
+            before = before + "\n\n" if before or out else ""
+            out.append(Prose(text=before + want + "\n\n"))
+        out.append(p)
+    return out

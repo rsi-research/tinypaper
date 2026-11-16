@@ -11,6 +11,7 @@ class Report(Strict):
     valid: bool = False                    # the file follows the format
     problems: list[str] = []
     claims: dict[str, str] = {}            # each claim's status on the paper's log
+    statements: dict[str, str] = {}        # each claim in words: its function's docstring
     compares: dict[str, list[str]] = {}    # for each claim that evaluates: what differs among the calls it read
     calls: int = 0                         # distinct calls the paper makes
     logged: int = 0                        # how many of them are in its log
@@ -29,6 +30,8 @@ class Report(Strict):
         for c, status in self.claims.items():
             how = self.compares.get(c)
             out.append(f"  {c}: {status}" + (f" (compares calls that differ in {', '.join(how)})" if how else ""))
+            if self.statements.get(c):
+                out.append(f"      {self.statements[c]}")
         out += ["  note: " + n for n in self.notes]
         out += ["  ran differently: " + m for m in self.ran_differently]
         out += [f"  challenged: claim {c['challenges']} by {c['paper']} claim {c['claim']}" for c in self.challenged_by]
@@ -102,6 +105,10 @@ class PaperVerify:
         for c in self.claims:
             status, read = evaluate(self, c)
             report.claims[c.id] = status
+            if c.statement:
+                report.statements[c.id] = c.statement
+            else:
+                report.notes.append(f"claim {c.id} has no docstring saying what it claims")
             if status in ("holds", "fails") and differ(read):
                 report.compares[c.id] = differ(read)
             if status.startswith("error"):

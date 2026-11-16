@@ -247,7 +247,13 @@ def test_challenges_and_vault():
     v = tp.Vault(os.path.dirname(a))
     assert v.name == "toy" and list(v.papers) == ["a", "b", "c"] and v["a"].path == a
     assert paper(a).verify().challenged_by == [dict(paper="b.md", claim="not_so", challenges="c1")]
-    assert v.tidy() == ["b", "c"] and v.tidy() == [] and "\nCites: [a](a.md)\n" in open(b).read()
+    assert v.tidy() == ["a", "b", "c"] and v.tidy() == [] and "\nCites: [a](a.md)\n" in open(b).read()
+    text = open(b).read()                                         # a viewer hides the fence's words, so tidy labels each block
+    assert "**Code `use`**\n\n```python code=use" in text and "**Experiments**\n\n```python experiments" in text
+    assert "**Claim `not_so`** (stated 2026-11-16, challenges `a.c1`)\n\n```python claim=not_so" in text
+    edit(b, "def not_so(r):\n", 'def not_so(r):\n    """Scale 3 gives a larger mean than scale 2."""\n')
+    assert v.tidy() == ["b"] and "challenges `a.c1`): Scale 3 gives a larger mean than scale 2.\n\n```python claim" in open(b).read()
+    assert v["b"].verify().statements == {"not_so": "Scale 3 gives a larger mean than scale 2."} and open(b).read().count("**Claim") == 1
     for x in v:
         run(x.path)
     reports = v.verify()
@@ -279,7 +285,9 @@ def test_reproduce():
 def test_log_written_by_hand():
     d, a, b = setup()
     run(a)
+    paper(a).tidy()
     full = open(a).read()
+    assert "\n\n**Log**\n\n```log\n" in full
     edit(a, full[full.index("```log"):], re.sub(r'"call":"[0-9a-f]+",', "", full[full.index("```log"):]))    # entries without ids
     p = paper(a)
     assert all(e.call is None for e in p.log.entries)

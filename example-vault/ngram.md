@@ -14,9 +14,13 @@ name: base
 at: ./char-bigram.md
 ```
 
+**Code `use`**
+
 ```python code=use
 from base import ngram, bpc
 ```
+
+**Experiments**
 
 ```python experiments
 for n in [3, 4, 5, 6, 7]:
@@ -24,26 +28,34 @@ for n in [3, 4, 5, 6, 7]:
         call("sweep", ngram, d=base.text, n=n, alpha=alpha, env=base.cpu)
 ```
 
+**Claim `longer_helps`** (stated 2026-11-15): The 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits.
+
 ```python claim=longer_helps stated=2026-11-15
 def longer_helps(r):
-    # the 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits
+    """The 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits."""
     alpha = min([1.0, 0.03], key=lambda a: bpc(r.sweep.where(n=5, alpha=a), "val"))
     return bpc(r.base.bigram) - bpc(r.sweep.where(n=5, alpha=alpha)) > 0.7
 ```
 
+**Claim `then_overfits`** (stated 2026-11-15): With light smoothing, n = 7 is worse on test than n = 5 while still better on train.
+
 ```python claim=then_overfits stated=2026-11-15
 def then_overfits(r):
-    # with light smoothing, n = 7 is worse on test than n = 5 while still better on train
+    """With light smoothing, n = 7 is worse on test than n = 5 while still better on train."""
     def at(n, split):
         return bpc(r.sweep.where(n=n, alpha=0.03), split)
     return at(7, "test") > at(5, "test") and at(7, "train") < at(5, "train")
 ```
 
+**Claim `smoothing_matters`** (stated 2026-11-15): At n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits.
+
 ```python claim=smoothing_matters stated=2026-11-15
 def smoothing_matters(r):
-    # at n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits
+    """At n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits."""
     return bpc(r.sweep.where(n=5, alpha=1.0)) - bpc(r.sweep.where(n=5, alpha=0.03)) > 0.2
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

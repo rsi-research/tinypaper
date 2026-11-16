@@ -35,23 +35,30 @@ name: bpe
 at: ./bpe.md
 ```
 
+**Code `use`**
+
 ```python code=use
 from base import bpc
 from nb import train
 ```
 
+**Experiments**
+
 ```python experiments
 call("transformer_tok", train, d=bpe.tok256, make=tr.transformer, ctx=128, steps=3000, lr=1e-3, seeds=2, env=base.cpu)
 ```
 
+**Claim `tokens_overfit`** (stated 2026-11-15): Per character, the same transformer on tokens is over 0.1 bits worse on test and over 0.2 bits better on train.
+
 ```python claim=tokens_overfit stated=2026-11-15
 def tokens_overfit(r):
-    # Same model, same steps, same window in ids. Per character, tokens are over 0.1 bits
-    # worse on test and over 0.2 bits better on the training split: the token model overfits.
+    """Per character, the same transformer on tokens is over 0.1 bits worse on test and over 0.2 bits better on train."""
     def gap(split):
         return bpc(r.transformer_tok, split) - bpc(r.tr.transformer, split)
     return gap("test") > 0.1 and gap("train") < -0.2
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

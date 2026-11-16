@@ -18,6 +18,8 @@ name: base
 at: ./char-bigram.md
 ```
 
+**Code `train`**
+
 ```python code=train
 import math
 import torch
@@ -67,6 +69,8 @@ def train(d, make, steps, seed, ctx=64, lr=3e-3, size=64, device="cpu", **kw):
     return dict(summary(cost, d), params=sum(p.numel() for p in model.parameters()))
 ```
 
+**Code `model`**
+
 ```python code=model
 def table(vocab):
     # logits for the next id, looked up by the current id
@@ -75,15 +79,21 @@ def table(vocab):
     return t
 ```
 
+**Experiments**
+
 ```python experiments
 call("table", train, d=base.text, make=table, steps=3000, lr=0.03, seeds=2, env=base.cpu)
 ```
 
+**Claim `bridge`** (stated 2026-11-15): The trained table is within 0.02 bits per character of the counted bigram.
+
 ```python claim=bridge stated=2026-11-15
 def bridge(r):
-    # the trained table is within 0.02 bits per character of the counted bigram
+    """The trained table is within 0.02 bits per character of the counted bigram."""
     return abs(bpc(r.table) - bpc(r.base.bigram)) < 0.02
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

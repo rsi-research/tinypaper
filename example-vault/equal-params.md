@@ -32,6 +32,8 @@ name: tr
 at: ./transformer.md
 ```
 
+**Code `select`**
+
 ```python code=select
 from base import bpc
 from nb import train
@@ -44,24 +46,32 @@ def tuned(runs):
     return runs.where(lr=min(RATES, key=lambda lr: bpc(runs.where(lr=lr), "val")))
 ```
 
+**Experiments**
+
 ```python experiments
 for lr in RATES:
     call("gru", train, d=base.text, make=rnn.gru, width=370, ctx=128, steps=3000, lr=lr, seeds=2, env=base.cpu)
     call("transformer", train, d=base.text, make=tr.transformer, ctx=128, steps=3000, lr=lr, seeds=2, env=base.cpu)
 ```
 
+**Claim `matched`** (stated 2026-11-15): The two models are within 2% of each other in parameters.
+
 ```python claim=matched stated=2026-11-15
 def matched(r):
-    # the two models are within 2% of each other in parameters
+    """The two models are within 2% of each other in parameters."""
     a, b = r.gru[0].out["params"], r.transformer[0].out["params"]
     return abs(a - b) / b < 0.02
 ```
 
+**Claim `gap_closes`** (stated 2026-11-15, challenges `tr.beats_rnn`): With both tuned, the transformer leads by less than 0.05 bits per character.
+
 ```python claim=gap_closes stated=2026-11-15 challenges=tr.beats_rnn
 def gap_closes(r):
-    # with both tuned, the transformer leads by less than 0.05 bits per character
+    """With both tuned, the transformer leads by less than 0.05 bits per character."""
     return bpc(tuned(r.gru)) - bpc(tuned(r.transformer)) < 0.05
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}

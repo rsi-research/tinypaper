@@ -29,6 +29,8 @@ name: ng
 at: ./ngram.md
 ```
 
+**Code `model`**
+
 ```python code=model
 import torch
 from base import bpc
@@ -55,26 +57,33 @@ def window(vocab, **kw):
     return Window(vocab, **kw)
 ```
 
+**Experiments**
+
 ```python experiments
 for k in [1, 2, 4, 8]:
     call("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
 ```
 
+**Claim `context_helps`** (stated 2026-11-15): Each doubling of the window helps up to 4 characters; from 4 to 8 the test cost moves by under 0.03 bits although the training cost keeps falling.
+
 ```python claim=context_helps stated=2026-11-15
 def context_helps(r):
-    # each doubling of the window helps up to 4 characters; from 4 to 8 the test cost moves
-    # by under 0.03 bits although the training cost keeps falling
+    """Each doubling of the window helps up to 4 characters; from 4 to 8 the test cost moves by under 0.03 bits although the training cost keeps falling."""
     test = [bpc(r.mlp.where(k=k)) for k in [1, 2, 4, 8]]
     train = [bpc(r.mlp.where(k=k), "train") for k in [4, 8]]
     return test[0] > test[1] > test[2] and abs(test[3] - test[2]) < 0.03 and train[1] < train[0]
 ```
 
+**Claim `beats_counts`** (stated 2026-11-15): The 8-character MLP beats the best count model of any order in the n-gram paper.
+
 ```python claim=beats_counts stated=2026-11-15
 def beats_counts(r):
-    # the 8-character MLP beats the best count model of any order in the n-gram paper
+    """The 8-character MLP beats the best count model of any order in the n-gram paper."""
     best = min(bpc(r.ng.sweep.where(n=n, alpha=a)) for n in [3, 4, 5, 6, 7] for a in [1.0, 0.03])
     return bpc(r.mlp.where(k=8)) < best
 ```
+
+**Log**
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}
