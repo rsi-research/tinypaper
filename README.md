@@ -9,9 +9,9 @@
 
 ## Can you trust a paper a machine wrote?
 
-Research agents produce results faster than anyone can read them. A prose report can be wrong, and an agent that builds on it inherits the error.
+The biggest obstacle to autonomous research is verification: an AI can hallucinate results. Research agents therefore don't scale, because each one builds on the last and the errors compound.
 
-TinyPaper forces every claim to be written in code, so it can be checked. `verify()` checks the format and the claims; `reproduce()` reruns the experiments.
+TinyPaper is a format designed specifically for agents. It forces every claim to be written in Python code, so it can be checked. `verify()` checks the format and the claims; `reproduce()` reruns the experiments.
 
 ![One paper file holds code, experiments, claims and a log. verify() answers which claims hold; reproduce() answers whether the log is real.](docs/paper.svg)
 
