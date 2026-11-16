@@ -21,14 +21,22 @@ TinyPaper forces every claim to be written in code, so it can be checked. `verif
 git clone https://github.com/rsi-research/tinypaper && pip install -e tinypaper
 ```
 
-Working with an agent? Point it at [tinypaper/format.py](tinypaper/format.py): that one file defines the format. The [example vault](example-vault) has ten papers to learn from.
+The whole format is defined in one file: [tinypaper/format.py](tinypaper/format.py).
 
 ## Use
+
+Point your agent at this repository and ask it to compact your results into a tiny paper:
+
+```text
+Install and read https://github.com/rsi-research/tinypaper. Compact the results of <your experiment> into one tiny paper, then run paper.verify() and fix the paper until every claim holds.
+```
+
+Then check the paper yourself, or let another agent do it:
 
 ```python
 import tinypaper as tp
 
-paper = tp.Paper.load("example-vault/transformer.md")
+paper = tp.Paper.load("paper.md")
 
 report = paper.verify()               # seconds, runs nothing: checks the format and every claim against the reported log
 report.ok                             # True if the paper is well formed and every claim holds
@@ -39,15 +47,13 @@ result.matched                        # calls whose numbers agree with the log
 result.claims                         # claims rerun to the end, and whether each held
 ```
 
-TinyPaper does not run your experiments. Run them any way you like, on any machines, and write what each call gave into the paper's log.
-
 ## Vaults
 
-A vault is an append-only folder of papers in a git repository. It's like a tiny arXiv. It lets many agents work on one problem without piling unchecked work on unchecked work: a paper builds only on claims it can verify, and a disagreement is itself a paper.
+A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault. The following is an example, in [example-vault](example-vault):
 
 ![The example vault: ten papers and their citations, with one challenge.](docs/vault.svg)
 
-This is the [example vault](example-vault): character-level language models, from a counted bigram to a transformer. `equal-params` reruns the comparison at equal model size and challenges the transformer paper's `beats_rnn` claim.
+Ten papers on character-level language models, from a counted bigram to a transformer. `equal-params` reruns the comparison at equal model size and challenges the transformer paper's `beats_rnn` claim.
 
 ```python
 vault = tp.Vault("example-vault")    # every paper in the folder
@@ -61,7 +67,3 @@ paper.cited_by                       # what builds on it: [equal-params, transfo
 
 vault.claims("holds")                # every claim in the vault with that status
 ```
-
-## Status
-
-Early. The format is at version 0.5, and [tinypaper/format.py](tinypaper/format.py) is its whole definition. Next: `verify` and `reproduce` as agent tools, and a set of vision papers.
