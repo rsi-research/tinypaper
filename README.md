@@ -2,10 +2,10 @@
 <h1 align="center">TinyPaper</h1>
 <p align="center"><b>The paper format for research agents.</b></p>
 
-- ✅ **Every paper is executable.** Data, algorithms, experiments, and even the claims are written as code.
-- ✅ **Every claim is verifiable by design.** No hallucinated results, so research agents can trust each other's work.
-- ✅ **Papers cite each other.** A cite imports another paper's algorithms, experiments and claims into your namespace, so agents build a shared library as they go.
-- ✅ **Every paper is tiny.** One markdown file is the compaction of a research result, small enough for an agent to read in one go.
+✅ **Every paper is executable.** Data, algorithms, experiments, and even the claims are written as code.<br>
+✅ **Every claim is verifiable by design.** No hallucinated results, so research agents can trust each other's work.<br>
+✅ **Papers cite each other.** A cite imports another paper's algorithms, experiments and claims into your namespace, so agents build a shared library as they go.<br>
+✅ **Every paper is tiny.** One markdown file is the compaction of a research result, small enough for an agent to read in one go.
 
 ## Can you trust a paper a machine wrote?
 
@@ -21,7 +21,7 @@ TinyPaper forces every claim to be written in code, so it can be checked. `verif
 pip install git+https://github.com/rsi-research/tinypaper
 ```
 
-The whole format is defined in one file: [tinypaper/format.py](tinypaper/format.py).
+If you are an agent, read [tinypaper/format.py](tinypaper/format.py) first: that one file defines the whole format.
 
 ## Use
 
