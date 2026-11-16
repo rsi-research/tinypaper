@@ -30,7 +30,7 @@ class Prose(Strict):
 
 
 class Block(Strict):
-    raw: Optional[str] = None      # the block exactly as written, so a paper renders back unchanged
+    raw: Optional[str] = None      # the block exactly as written; the paper renders back from these
 
 
 class Cite(Block):
@@ -51,7 +51,6 @@ class Env(Block):
     name: str
     hardware: str = ""
     packages: list[str] = []
-    pitfalls: list[str] = []
 
 
 class DataFile(Strict):
@@ -89,7 +88,6 @@ class Claim(Block):
     kind: Literal["claim"] = "claim"
     id: str
     stated: str
-    differs: Optional[list[str]] = None    # an optional statement about the claim, tested by check
     challenges: Optional[str] = None
     source: str
 
@@ -107,30 +105,20 @@ class Entry(Strict):
     seconds: float = 0
     out: Any = None
     emitted: list[dict[str, Any]] = []
-    status: str = "done"           # done, stopped or error; a paper's log holds only calls that are done
-    error: Optional[str] = None
 
 
 class Log(Block):
     """The log block: the author's log, written into the paper by the runner."""
     kind: Literal["log"] = "log"
-    name: str
     ran_on: dict[str, Any] = {}
     history: dict[str, Any] = {}   # counts from the history: runs made, claims edited after results existed
     entries: list[Entry] = []
 
 
-class LocalLog(Strict):
-    """A log kept beside the vault and not in a paper: a rerun on this machine."""
-    seed_offset: int = 0
-    ran_on: dict[str, Any] = {}
-    entries: dict[str, Entry] = {}
-
-
 class Local(Strict):
     """What the tools keep beside the vault for one paper. None of it is part of the paper."""
-    logs: dict[str, LocalLog] = {}
-    history: list[dict[str, Any]] = []     # every run made and every claim edited, in order
+    rerun: dict[str, Entry] = {}               # the calls a reproduction has finished on this machine
+    history: list[dict[str, Any]] = []         # every run made and every claim edited, in order
     running: dict[str, dict[str, Any]] = {}    # calls some process is running now, and which process
 
 
@@ -145,7 +133,18 @@ class Declared:
     seed: Optional[int]
     args: dict
 
-    def id(self, offset=0):
+    @property
+    def id(self):
         """The call's identity: its function, arguments, seed and code. The experiment name is not part of it."""
-        seed = None if self.seed is None else self.seed + offset
-        return sha(json.dumps(["fn:" + self.fn.__name__, self.args, seed, self.paper.code_hash], sort_keys=True))[:16]
+        return sha(json.dumps(["fn:" + self.fn.__name__, self.args, self.seed, self.paper.code_hash], sort_keys=True))[:16]
+
+
+@dataclass
+class Outcome:
+    """One execution of a call: its entry if it finished, and how it ended."""
+    entry: Optional[Entry]
+    status: str                    # done, stopped or error
+    error: Optional[str]
+    emitted: list
+    seconds: float
+    machine: dict

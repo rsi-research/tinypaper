@@ -1,4 +1,4 @@
-"""Paper: one markdown file as a tree of typed parts. Parsing, rendering, its namespace and its calls."""
+"""Paper: one markdown file as a tree of typed parts. Parsing, its namespace, its calls and its log."""
 import fcntl, importlib.metadata, inspect, json, linecache, os, platform, re, socket, sys, time, types
 from contextlib import contextmanager
 from typing import Annotated, Any, Optional, Union
@@ -6,7 +6,7 @@ import yaml
 from pydantic import Field, PrivateAttr, ValidationError
 from . import records, store
 from .check import PaperChecks
-from .model import (Cite, Claim, Code, Data, Declared, Entry, Env, Experiments, Header, Local, LocalLog, Log, Prose, Strict, sha)
+from .model import (Cite, Claim, Code, Data, Declared, Entry, Env, Experiments, Header, Local, Log, Outcome, Prose, Strict, sha)
 from .records import Stop, TooLarge, encode, fits
 from .reproduce import PaperReproduce
 from .store import Unreachable
@@ -45,26 +45,15 @@ def canonical(v):
     if id(v) in NAMES:
         return NAMES[id(v)]
     if isinstance(v, Declared):
-        return "call:" + v.id()
+        return "call:" + v.id
     if callable(v):
         return "fn:" + getattr(v, "__name__", type(v).__name__)
     raise TypeError(f"call argument {v!r} is not a literal, a function, a data block or a call")
 
 
-def block_text(part):
-    """A block as markdown, written from its fields."""
-    if part.kind == "log":
-        meta = dict(log=part.name, ran_on=part.ran_on, history=part.history)
-        return "```log\n" + "\n".join([json.dumps(meta)] + [e.model_dump_json(exclude_defaults=True) for e in part.entries]) + "\n```"
-    if part.kind == "code":
-        return f"```python code={part.name}\n{part.source}```"
-    if part.kind == "experiments":
-        return f"```python experiments\n{part.source}```"
-    if part.kind == "claim":
-        head = f"claim={part.id} stated={part.stated}" + (f" differs={','.join(part.differs)}" if part.differs is not None else "")
-        return f"```python {head}" + (f" challenges={part.challenges}" if part.challenges else "") + f"\n{part.source}```"
-    fields = part.model_dump(by_alias=True, exclude={"raw", "kind"}, exclude_defaults=True)
-    return f"```{part.kind}\n" + yaml.safe_dump(fields, sort_keys=False) + "```"
+def log_text(log):
+    meta = dict(ran_on=log.ran_on, history=log.history)
+    return "```log\n" + "\n".join([json.dumps(meta)] + [e.model_dump_json(exclude_defaults=True) for e in log.entries]) + "\n```"
 
 
 def parse_block(kind, attrs, body, raw):
@@ -72,18 +61,18 @@ def parse_block(kind, attrs, body, raw):
         return {"cite": Cite, "env": Env, "data": Data}[kind].model_validate({**yaml.safe_load(body), "raw": raw})
     if kind == "log":
         lines = [json.loads(l) for l in body.splitlines() if l.strip()]
-        return Log(name=lines[0]["log"], ran_on=lines[0].get("ran_on", {}), history=lines[0].get("history", {}),
-                   entries=[Entry.model_validate(l) for l in lines[1:]])
-    if attrs and attrs[0] == "experiments":
+        return Log(ran_on=lines[0].get("ran_on", {}), history=lines[0].get("history", {}), entries=[Entry.model_validate(l) for l in lines[1:]])
+    if attrs == ["experiments"]:
         return Experiments(source=body, raw=raw)
     a = dict(x.split("=", 1) if "=" in x else (x, "") for x in attrs)
-    if "code" in a:
+    if set(a) == {"code"}:
         return Code(name=a["code"], source=body, raw=raw)
     if "claim" in a:
+        if set(a) - {"claim", "stated", "challenges"}:
+            raise ValueError(f"claim {a['claim']} has an unknown attribute: {', '.join(sorted(set(a) - {'claim', 'stated', 'challenges'}))}")
         if "stated" not in a:
             raise ValueError(f"claim {a['claim']} has no `stated` date")
-        return Claim(id=a["claim"], stated=a["stated"], source=body, raw=raw, challenges=a.get("challenges"),
-                     differs=sorted(x for x in a["differs"].split(",") if x) if "differs" in a else None)
+        return Claim(id=a["claim"], stated=a["stated"], source=body, raw=raw, challenges=a.get("challenges"))
     raise ValueError("a python block is `code=<name>`, `experiments` or `claim=<id>`")
 
 
@@ -182,34 +171,21 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         return paper
 
     def render(self):
-        """The paper as markdown. For a paper read from a file this is the file, with the log block rewritten."""
-        return "".join(p.text if p.kind == "prose" else (p.raw if p.raw is not None else block_text(p)) for p in self.parts)
-
-    def dump(self):
-        """The paper as plain data. `Paper.from_dump` reads it back."""
-        out = self.model_dump(mode="json", by_alias=True)
-        out["path"] = os.path.basename(self.path)
-        return out
-
-    @classmethod
-    def from_dump(cls, data, folder="."):
-        data = dict(data)
-        data["path"] = os.path.join(os.path.abspath(folder), data["path"])
-        paper = cls.model_validate(data)
-        paper._text = paper.render()
-        return paper
+        """The paper as markdown: the prose and blocks as written, and the log as the runner wrote it."""
+        return "".join(p.text if p.kind == "prose" else log_text(p) if p.kind == "log" else p.raw for p in self.parts)
 
     def _of(self, kind):
         return [p for p in self.parts if p.kind == kind]
 
     stem = property(lambda self: os.path.basename(self.path)[:-3])
     dir = property(lambda self: os.path.dirname(self.path))
-    cites = property(lambda self: {c.name: _Cited(c, self) for c in self._of("cite")})
+    cites = property(lambda self: dict(self._cited))        # {short name: the cited Paper}
     envs = property(lambda self: {e.name: e for e in self._of("env")})
     data = property(lambda self: {d.name: d for d in self._of("data")})
     code = property(lambda self: self._of("code"))
     claims = property(lambda self: self._of("claim"))
     log = property(lambda self: (self._of("log") or [None])[0])
+    logged = property(lambda self: {e.call: e for e in self.log.entries} if self.log else {})
     lines = property(lambda self: sum(len([l for l in c.source.splitlines() if l.strip()]) for c in self.code))
 
     @property
@@ -296,9 +272,9 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         if self._declared is None:
             out, ns = [], self.build()
 
-            def run(name, fn, env=None, seeds=None, **kw):
+            def call(name, fn, env=None, seeds=None, **kw):
                 if "device" in kw or "seed" in kw:
-                    raise ValueError(f"run {name}: `device` and `seed` are set by the runner, not in the call")
+                    raise ValueError(f"call in {name}: `device` and `seed` are set by the runner, not in the call")
                 args = {k: canonical(v) for k, v in sorted(kw.items())}
                 which = list(seeds) if isinstance(seeds, (list, tuple)) else range(1, seeds + 1) if seeds else [None]
                 made = [Declared(self, name, fn, kw, env, s, args) for s in which]
@@ -306,7 +282,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
                 return made if seeds else made[0]
             for block in self._of("experiments"):
                 scope = Namespace(parent=ns)
-                scope["run"] = run
+                scope["call"] = call
                 exec(compile(block.source, f"{self.path}:experiments", "exec"), scope)
             self._declared = out
         return self._declared
@@ -316,10 +292,10 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         seen = {}
         for d in self.declared():
             if not only or d.name in only:
-                seen.setdefault(d.id(), d)
+                seen.setdefault(d.id, d)
         return list(seen.values())
 
-    # ---- logs: the author's is in the file; reruns and the history are kept beside the vault, in logs/
+    # ---- beside the vault, in logs/ and not committed: the history, and a reproduction's finished calls
 
     local_path = property(lambda self: os.path.join(self.dir, "logs", self.stem + ".json"))
 
@@ -348,13 +324,6 @@ class Paper(Strict, PaperChecks, PaperReproduce):
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
 
-    def entries(self, log=None):
-        """({call identity: entry}, seed offset) for one log: the author's (None) or a local rerun by name."""
-        if log is None:
-            return ({e.call: e for e in self.log.entries} if self.log else {}), 0
-        kept = self.local.logs.get(log)
-        return (dict(kept.entries), kept.seed_offset) if kept else ({}, 0)
-
     def _disk_log(self):
         """The log block as it is in the file now, which another process may have just written."""
         m = re.search(r"^```log\n(.*?)^```[ \t]*$", open(self.path).read(), re.S | re.M)
@@ -381,40 +350,41 @@ class Paper(Strict, PaperChecks, PaperReproduce):
 
     # ---- running it
 
-    def execute(self, d, device, max_emits=None, deadline=None, offset=0, log=None):
-        """Run one call and return (its entry, the machine it ran on). Nothing is stored here."""
-        call = {}
+    def execute(self, d, device, entries=None, max_emits=None, deadline=None):
+        """Run one call. Nothing is stored here. `entries` is the log to take the outputs of calls
+        it uses as arguments from."""
+        entries, kw = self.logged if entries is None else entries, {}
         for k, v in d.kw.items():
             if isinstance(v, Declared):        # another call as an argument: its output, run first if it is not logged
-                have = v.paper.entries(log)[0].get(v.id(offset))
-                v = (have or v.paper.execute(v, device, offset=offset, log=log)[0]).out
-            call[k] = v
-        seed = None if d.seed is None else d.seed + offset
-        if seed is not None:
-            call["seed"] = seed
+                have = entries.get(v.id) or v.paper.execute(v, device, entries).entry
+                v = have.out if have else None
+            kw[k] = v
+        if d.seed is not None:
+            kw["seed"] = d.seed
         if "device" in inspect.signature(d.fn).parameters:
-            call["device"] = device
+            kw["device"] = device
         start = time.time()
         records._current = stream = dict(stream=[], max=max_emits, deadline=deadline, start=start)
         out, status, error = None, "done", None
         try:
-            out = encode(d.fn(**call))
+            out = encode(d.fn(**kw))
             fits(out, stream["stream"])
         except Stop:
             status = "stopped"
         except TooLarge as e:
-            out, status, error = None, "error", str(e)
+            status, error = "error", str(e)
         except Exception as e:
             status, error = "error", f"{type(e).__name__}: {e}"
         finally:
             records._current = None
-        entry = Entry(call=d.id(offset), fn="fn:" + d.fn.__name__, args=d.args, seed=seed, seconds=round(time.time() - start, 2),
-                      out=out, emitted=stream["stream"], status=status, error=error)
-        return entry, ran_on(d.env, device)
+        seconds = round(time.time() - start, 2)
+        entry = Entry(call=d.id, fn="fn:" + d.fn.__name__, args=d.args, seed=d.seed, seconds=seconds, out=out,
+                      emitted=stream["stream"]) if status == "done" else None
+        return Outcome(entry, status, error, stream["stream"], seconds, ran_on(d.env, device))
 
     def _taken(self, d):
         """Is another live process already running this call?"""
-        who = self.local.running.get(d.id())
+        who = self.local.running.get(d.id)
         if not who:
             return False
         host, _, pid = who["owner"].rpartition(":")
@@ -426,45 +396,39 @@ class Paper(Strict, PaperChecks, PaperReproduce):
             return int(pid) != os.getpid()
         return time.time() - who["started"] < 24 * 3600
 
-    def run(self, name="author", device=None, deep=False, rerun=False, only=None, say=print):
-        """Run every declared call that is not in the author's log, and write the log into the paper.
+    def run(self, device=None, only=None, say=print):
+        """Run every call that is not in the paper's log, and write the log into the paper.
 
-        The paper file is rewritten: its log block holds what each call returned and emitted. `name`
-        names the machine or occasion. With deep=True the cited papers run first. `only` is a list
-        of experiment names to run. Several processes may call this at once, for example one per
-        GPU: each takes the next call nobody has started."""
+        The paper file is rewritten: its log block holds what each call returned and emitted. `only`
+        is a list of experiment names to run. Cited papers are not run: use `vault.run()` for a
+        whole vault. Several processes may call this at once, for example one per GPU: each takes
+        the next call nobody has started."""
         device, done = device or default_device(), []
         self.tidy()
-        if deep:
-            for p in self._cited.values():
-                done += p.run(name, device, True, rerun, None, say)
         with self.locked():
             self.note_claim_edits()
             self.save_local()
         for d in self.calls(only):
             with self.locked():                    # take the next call nobody has done or is doing
                 old = self._disk_log()
-                have = {e.call for e in old.entries} if old and old.name == name else set()
-                if (d.id() in have and not rerun) or self._taken(d):
+                if (old and any(e.call == d.id for e in old.entries)) or self._taken(d):
                     continue
-                self.local.running[d.id()] = dict(owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
+                self.local.running[d.id] = dict(owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
                 self.save_local()
-            entry, machine = self.execute(d, device)
-            done.append(entry)
+            got = self.execute(d, device)
+            done.append(got)
             say(f"{self.stem}: {d.name} {json.dumps({k: v for k, v in d.args.items() if not str(v).startswith(('fn:', 'data:'))})}"
-                f" seed={d.seed} {entry.status} in {entry.seconds}s" + (f" ({entry.error})" if entry.error else ""))
+                f" seed={d.seed} {got.status} in {got.seconds}s" + (f" ({got.error})" if got.error else ""))
             with self.locked():                    # add it to whatever the log holds now
-                self.local.running.pop(d.id(), None)
-                self._note(event="run", log=name, experiment=d.name, call=entry.call, args=d.args, seed=d.seed,
-                           status=entry.status, seconds=entry.seconds)
+                self.local.running.pop(d.id, None)
+                self._note(event="run", experiment=d.name, call=d.id, args=d.args, seed=d.seed, status=got.status, seconds=got.seconds)
                 self.save_local()
-                if entry.status == "done":
+                if got.entry:
                     old = self._disk_log()
-                    same = old is not None and old.name == name
-                    kept = {e.call: e for e in old.entries} if same else {}
-                    kept[entry.call] = entry
-                    order = [x.id() for x in self.calls()]                         # only calls the paper still makes
-                    self._write_log(Log(name=name, ran_on=merged(old.ran_on if same else {}, machine), history=self.history_counts(),
+                    kept = {e.call: e for e in old.entries} if old else {}
+                    kept[d.id] = got.entry
+                    order = [x.id for x in self.calls()]                         # only calls the paper still makes
+                    self._write_log(Log(ran_on=merged(old.ran_on if old else {}, got.machine), history=self.history_counts(),
                                         entries=[kept[i] for i in order if i in kept]))
         return done
 
@@ -486,15 +450,6 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         with open(self.path, "w") as f:
             f.write(self._text)
 
-    def keep(self, name, entry, machine, offset=0):
-        """Store a rerun's entry in the local log `name`, and note it in the history."""
-        with self.locked():
-            kept = self.local.logs.setdefault(name, LocalLog(seed_offset=offset))
-            kept.entries[entry.call] = entry
-            kept.ran_on = merged(kept.ran_on, machine)
-            self._note(event="run", log=name, call=entry.call, args=entry.args, seed=entry.seed, status=entry.status, seconds=entry.seconds)
-            self.save_local()
-
     def tidy(self):
         """Rewrite the parts of the file that are derived from the rest: the line of links to the
         papers it cites. Returns whether the file changed."""
@@ -515,11 +470,3 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         with open(self.path, "w") as f:
             f.write(self._text)
         return True
-
-
-class _Cited:
-    """A cite together with the paper it resolved to."""
-
-    def __init__(self, cite, owner):
-        self.cite, self.name, self.at = cite, cite.name, cite.at
-        self.paper = owner._cited.get(cite.name)

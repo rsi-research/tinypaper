@@ -1,6 +1,6 @@
 ---
 title: Neural models gain most over counts at the start of a word
-tinypaper: 0.4
+tinypaper: 0.5
 date: 2026-11-15
 ---
 
@@ -50,14 +50,14 @@ def starts_are_hard(r):
     return at(best, "at_word_start") > 1.5 * at(best, "elsewhere")
 ```
 
-```python claim=transformer_gain stated=2026-11-15 differs=fn
+```python claim=transformer_gain stated=2026-11-15
 def transformer_gain(r):
     # the transformer's gain over the 5-gram is larger at word starts than elsewhere
     counts = r.ng.sweep.where(n=5, alpha=0.03)
     return gain(counts, r.tr.transformer, "at_word_start") > gain(counts, r.tr.transformer, "elsewhere")
 ```
 
-```python claim=gru_gain stated=2026-11-15 differs=fn
+```python claim=gru_gain stated=2026-11-15
 def gru_gain(r):
     # and the same holds for the GRU
     counts = r.ng.sweep.where(n=5, alpha=0.03)

@@ -1,6 +1,6 @@
 ---
 title: A character bigram predicts Shakespeare better than character frequencies
-tinypaper: 0.4
+tinypaper: 0.5
 date: 2026-11-15
 ---
 
@@ -118,11 +118,11 @@ def bpc(runs, split="test"):
 ```
 
 ```python experiments
-run("unigram", ngram, d=text, n=1, env=cpu)
-run("bigram", ngram, d=text, n=2, env=cpu)
+call("unigram", ngram, d=text, n=1, env=cpu)
+call("bigram", ngram, d=text, n=2, env=cpu)
 ```
 
-```python claim=c1 stated=2026-11-15 differs=n
+```python claim=c1 stated=2026-11-15
 def c1(r):
     # knowing the previous character saves more than one bit per character
     return bpc(r.unigram) - bpc(r.bigram) > 1.0
@@ -135,7 +135,7 @@ def c2(r):
 ```
 
 ```log
-{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 2, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 2, "claims_edited": []}}
 {"call":"e8ad8c83c4fffc9e","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":1},"seconds":0.05,"out":{"test_bpc":4.850418567657471,"val_bpc":4.806154727935791,"train_bpc":4.73865270614624,"at_word_start":5.6748151779174805,"elsewhere":4.65974235534668}}
 {"call":"ea59bb468f5ffee7","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":2},"seconds":0.06,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
 ```

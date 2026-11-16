@@ -1,6 +1,6 @@
 ---
 title: Longer count models help up to five characters, then overfit
-tinypaper: 0.4
+tinypaper: 0.5
 date: 2026-11-15
 ---
 
@@ -21,17 +21,17 @@ from base import ngram, bpc
 ```python experiments
 for n in [3, 4, 5, 6, 7]:
     for alpha in [1.0, 0.03]:
-        run("sweep", ngram, d=base.text, n=n, alpha=alpha, env=base.cpu)
+        call("sweep", ngram, d=base.text, n=n, alpha=alpha, env=base.cpu)
 ```
 
-```python claim=longer_helps stated=2026-11-15 differs=n,alpha
+```python claim=longer_helps stated=2026-11-15
 def longer_helps(r):
     # the 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits
     alpha = min([1.0, 0.03], key=lambda a: bpc(r.sweep.where(n=5, alpha=a), "val"))
     return bpc(r.base.bigram) - bpc(r.sweep.where(n=5, alpha=alpha)) > 0.7
 ```
 
-```python claim=then_overfits stated=2026-11-15 differs=n
+```python claim=then_overfits stated=2026-11-15
 def then_overfits(r):
     # with light smoothing, n = 7 is worse on test than n = 5 while still better on train
     def at(n, split):
@@ -39,14 +39,14 @@ def then_overfits(r):
     return at(7, "test") > at(5, "test") and at(7, "train") < at(5, "train")
 ```
 
-```python claim=smoothing_matters stated=2026-11-15 differs=alpha
+```python claim=smoothing_matters stated=2026-11-15
 def smoothing_matters(r):
     # at n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits
     return bpc(r.sweep.where(n=5, alpha=1.0)) - bpc(r.sweep.where(n=5, alpha=0.03)) > 0.2
 ```
 
 ```log
-{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 10, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 10, "claims_edited": []}}
 {"call":"8ec9b130e36168f9","fn":"fn:ngram","args":{"alpha":1.0,"d":"data:char-bigram/text","n":3},"seconds":0.04,"out":{"test_bpc":3.02884578704834,"val_bpc":2.939361095428467,"train_bpc":2.8658430576324463,"at_word_start":4.134876728057861,"elsewhere":2.773030996322632}}
 {"call":"2e67aaa31cb11ee1","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:char-bigram/text","n":3},"seconds":0.04,"out":{"test_bpc":3.0444157123565674,"val_bpc":2.8840770721435547,"train_bpc":2.80180287361145,"at_word_start":4.130579471588135,"elsewhere":2.7931952476501465}}
 {"call":"6b018d01f0030180","fn":"fn:ngram","args":{"alpha":1.0,"d":"data:char-bigram/text","n":4},"seconds":0.04,"out":{"test_bpc":2.8757052421569824,"val_bpc":2.7587738037109375,"train_bpc":2.5582144260406494,"at_word_start":4.169795036315918,"elsewhere":2.5763936042785645}}

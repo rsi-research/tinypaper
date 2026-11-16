@@ -3,7 +3,7 @@
 The examples are the test cases for the format. Each one exists to exercise a kind of
 dependency or a rule. This file lists the planned set, what each paper tests, and how far it is.
 
-Status of the set: the language papers are written in format 0.4 under `example-vault/` and run
+Status of the set: the language papers are written in format 0.5 under `example-vault/` and run
 with the checker and runner. The vision
 papers and the joining papers are not written.
 
@@ -31,7 +31,7 @@ papers and the joining papers are not written.
    pixel-lm   mnist-mlp + transformer  MNIST pixels as a sequence, in bits per pixel
 ```
 
-## Language papers (written, format 0.4)
+## Language papers (written, format 0.5)
 
 | Paper | Cites | What it tests in the format |
 |---|---|---|
@@ -73,13 +73,14 @@ The format the papers use is defined in [SPEC.md](SPEC.md).
 ## What has been run
 
 Every paper in the example vault has been run in full by its author run, on one A40 GPU with
-PyTorch 2.6.0, and carries its log in its own file. All 20 claims hold. `check` flags each
+PyTorch 2.6.0, and carries its log in its own file. All 19 claims hold. `check` flags each
 paper as run differently from its declared environment (PyTorch 2.11.0 on CPU).
 
-Each paper was then given a two-minute `reproduce` on a CPU. The four cheap papers and
-`where-it-helps` reached `full`. The five larger ones reached `prefix`: all 26 of their calls
-match the paper's log on their first ten steps, and the rerun reports what a full rerun would
-need on that machine, from 3 minutes to 1.8 hours.
+Each paper was then given a two-minute `reproduce` on a CPU. The four cheap papers were rerun
+to the end with every claim holding, and `where-it-helps`, which makes no calls, had its claims
+evaluated. For the five larger ones all 26 calls match the paper's log on their first ten
+steps, and the rerun reports what finishing would need on that machine, from 3 minutes to
+about 2 hours.
 
 | Model | Test bits per character |
 |---|---|

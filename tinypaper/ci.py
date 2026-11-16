@@ -27,7 +27,7 @@ def touched(vault, base):
     while more:                            # a paper that cites a changed paper may have gone stale
         more = False
         for name, p in papers.items():
-            if name not in changed and any(c.stem in changed for c in p._cited.values()):
+            if name not in changed and any(c.stem in changed for c in p.cites.values()):
                 changed.add(name)
                 more = True
     return [n for n in papers if n in changed], "changed papers and the papers that cite them"
@@ -55,21 +55,20 @@ def main(argv=None):
     lines = [f"## TinyPaper check: `{vault.name}`", "",
              f"{len(papers)} of {len(vault.papers)} papers ({why}). Installed: {', '.join(pins) or 'nothing'}. "
              f"Each paper was rerun for up to {args.time} on this runner.", "",
-             "| Paper | Check | Claims on its log | Rerun here | Claims rerun | Still needed |", "|---|---|---|---|---|---|"]
+             "| Paper | Check | Claims on its log | First points match | Calls rerun | Claims rerun | Still needed |", "|---|---|---|---|---|---|---|"]
     ok, details = True, []
     for p in papers:
         report = p.check()
         ok &= report.ok
-        held = sum(s.get("paper") == "holds" for s in report.claims.values())
-        result = p.reproduce(time=args.time, name="ci", say=lambda *a: None) if report.valid else None
-        rerun = [s for s in (result.claims.values() if result else []) if s in ("holds", "fails")]
-        need = "" if not result or not result.needed else f"about {result.needed / 60:.0f} min"
+        held = sum(s == "holds" for s in report.claims.values())
+        r = p.reproduce(time=args.time, say=lambda *a: None) if report.valid else None
+        need = "" if not r or not r.needed else f"about {r.needed / 60:.0f} min"
         lines.append(f"| `{p.stem}` | {'ok' if report.ok else '**not ok**'} | {held} of {len(report.claims)} hold | "
-                     f"{result.tier if result else 'not run'} | {sum(s == 'holds' for s in rerun)} of {len(rerun)} hold | {need} |")
-        details += ["", f"<details><summary>{p.stem}</summary>", "", "```", report.text()] + ([result.text()] if result else []) + ["```", "</details>"]
+                     + (f"{r.matched} of {r.compared} calls | {r.rerun} of {r.calls} | {r.held} of {r.attempted} hold | {need} |" if r else "not run | | | |"))
+        details += ["", f"<details><summary>{p.stem}</summary>", "", "```", report.text()] + ([r.text()] if r else []) + ["```", "</details>"]
         print(report.text(), flush=True)
-        if result:
-            print(result.text(), flush=True)
+        if r:
+            print(r.text(), flush=True)
     summary = "\n".join(lines + details) + "\n"
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:

@@ -1,5 +1,5 @@
 """Tests on a toy vault that needs only numpy. Run with pytest, or directly with python."""
-import hashlib, json, os, re, shutil, subprocess, sys, tempfile
+import hashlib, os, re, shutil, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tinypaper as tp
@@ -7,8 +7,8 @@ from tinypaper import store
 
 A = '''---
 title: Toy root
-tinypaper: 0.4
-date: 2026-11-15
+tinypaper: 0.5
+date: 2026-11-16
 ---
 
 Some prose.
@@ -59,19 +59,19 @@ def use(init):
 ```
 
 ```python experiments
-run("small", fit, d=nums, scale=1, env=cpu, seeds=2)
-run("big", fit, d=nums, scale=2, env=cpu, seeds=2)
-run("pair", fit, d=nums, scale=1, env=cpu, seeds=2)
-pre = run("pre", make, d=nums)
-run("post", use, init=pre)
+call("small", fit, d=nums, scale=1, env=cpu, seeds=2)
+call("big", fit, d=nums, scale=2, env=cpu, seeds=2)
+call("pair", fit, d=nums, scale=1, env=cpu, seeds=2)
+pre = call("pre", make, d=nums)
+call("post", use, init=pre)
 ```
 
-```python claim=c1 stated=2026-11-15 differs=scale
+```python claim=c1 stated=2026-11-16
 def c1(r):
     return r.big[0].out["mean"] > r.small[0].out["mean"]
 ```
 
-```python claim=c2 stated=2026-11-15
+```python claim=c2 stated=2026-11-16
 def c2(r):
     return r.post[0].out["total"] == 60.0 and r.pair[1].out == r.small[1].out
 ```
@@ -79,8 +79,8 @@ def c2(r):
 
 B = '''---
 title: Toy challenge
-tinypaper: 0.4
-date: 2026-11-15
+tinypaper: 0.5
+date: 2026-11-16
 ---
 
 ```cite
@@ -93,10 +93,10 @@ from a import fit
 ```
 
 ```python experiments
-run("huge", fit, d=a.nums, scale=3, seeds=1)
+call("huge", fit, d=a.nums, scale=3, seeds=1)
 ```
 
-```python claim=not_so stated=2026-11-15 differs=scale challenges=a.c1
+```python claim=not_so stated=2026-11-16 challenges=a.c1
 def not_so(r):
     return r.huge[0].out["mean"] > r.a.big[0].out["mean"]
 ```
@@ -104,8 +104,8 @@ def not_so(r):
 
 C = '''---
 title: Toy analysis
-tinypaper: 0.4
-date: 2026-11-15
+tinypaper: 0.5
+date: 2026-11-16
 ---
 
 ```cite
@@ -113,7 +113,7 @@ name: a
 at: ./a.md
 ```
 
-```python claim=only stated=2026-11-15
+```python claim=only stated=2026-11-16
 def only(r):
     return r.a.big[0].out["mean"] == 2 * r.a.small[0].out["mean"]
 ```
@@ -148,88 +148,77 @@ def paper(path):
     return tp.Paper.load(path)
 
 
-def test_parse_render_dump():
+def run(path):
+    return paper(path).run(device="cpu", say=quiet)
+
+
+def test_parse_and_render():
     d, a, b = setup()
     p = paper(a)
     assert p.render() == open(a).read()
     assert [x.name for x in p.code] == ["all"] and list(p.envs) == ["cpu"] and [c.id for c in p.claims] == ["c1", "c2"]
-    assert p.data["nums"].files["nums"].sha256 and p.header.title == "Toy root"
-    again = tp.Paper.from_dump(json.loads(json.dumps(p.dump())), folder=os.path.dirname(a))
-    assert again.render() == open(a).read() and again.code_hash == p.code_hash
-    for part in again.parts:                       # written from the fields alone, it parses to the same paper
-        if part.kind != "prose":
-            part.raw = None
-    regen = tp.Paper.parse(again.render(), a)
-    assert regen.code_hash == p.code_hash and [c.model_dump(exclude={"raw"}) for c in regen.claims] == [c.model_dump(exclude={"raw"}) for c in p.claims]
+    assert p.data["nums"].files["nums"].sha256 and p.header.title == "Toy root" and list(paper(b).cites) == ["a"]
     edit(a, "hardware: 1 CPU", "hardware: 1 CPU\ncolour: red")
     assert any("colour" in x for x in paper(a).problems)          # an unknown field is an error
+    edit(a, "claim=c1 stated=2026-11-16", "claim=c1 stated=2026-11-16 differs=scale")
+    assert any("unknown attribute" in x for x in paper(a).problems)
 
 
 def test_run_and_check():
     d, a, b = setup()
     rep = paper(a).check()
-    assert rep.ok and rep.calls["paper"] == dict(logged=0, missing=6) and rep.claims["c1"]["paper"].startswith("open"), rep.problems
+    assert rep.ok and (rep.calls, rep.logged) == (6, 0) and rep.claims["c1"].startswith("open"), rep.problems
     assert len(paper(a).declared()) == 8 and len(paper(a).calls()) == 6       # two experiments share two calls
-    assert len(paper(a).run(name="mine", device="cpu", say=quiet)) == 6
+    assert len(run(a)) == 6
     p = paper(a)
-    assert p.log.name == "mine" and len(p.log.entries) == 6 and "```log" in open(a).read()
+    assert len(p.log.entries) == 6 and "```log" in open(a).read()
     big = [e for e in p.log.entries if e.args.get("scale") == 2][0]
     assert big.out == {"mean": 4.0, "top": 6.0} and len(big.emitted) == 20 and big.emitted[0]["step"] == 0
     rep = p.check()
-    assert rep.ok and {c: s["paper"] for c, s in rep.claims.items()} == dict(c1="holds", c2="holds"), rep.problems
-    assert rep.calls["paper"] == dict(logged=6, missing=0) and any("numpy" in m for m in rep.ran_differently["paper"])
-    assert rep.history["runs"] == 6 and p.log.history["runs"] == 6 and p.run(name="mine", device="cpu", say=quiet) == []
+    assert rep.ok and rep.claims == dict(c1="holds", c2="holds") and rep.logged == 6, rep.problems
+    assert rep.compares == {"c1": ["scale"], "c2": ["fn"]} and any("numpy" in m for m in rep.ran_differently)
+    assert rep.history["runs"] == 6 and p.log.history["runs"] == 6 and run(a) == []
     assert tp.Paper.parse(open(a).read(), a).render() == open(a).read()
     rep.text()
     shutil.rmtree(os.path.join(d, "toy", "logs"))                 # a clone has the paper and nothing else
     tp.paper.PAPERS.clear()
     rep = paper(a).check()
-    assert rep.ok and rep.claims["c1"]["paper"] == "holds" and rep.history["runs"] == 6
+    assert rep.ok and rep.claims["c1"] == "holds" and rep.history["runs"] == 6
 
 
 def test_code_change_and_history():
     d, a, b = setup()
-    paper(a).run(name="mine", device="cpu", say=quiet)
+    run(a)
     edit(a, "d.x * 10", "d.x * 20")                               # new code: every call is a different call
     rep = paper(a).check()
-    assert rep.calls["paper"] == dict(logged=0, missing=6) and all(s["paper"].startswith("open") for s in rep.claims.values())
-    paper(a).run(name="mine", device="cpu", say=quiet)
+    assert rep.logged == 0 and all(s.startswith("open") for s in rep.claims.values())
+    run(a)
     rep = paper(a).check()
-    assert rep.claims["c2"]["paper"] == "fails" and rep.history["runs"] == 12 and rep.history["no_longer_made"] == 6
+    assert rep.claims["c2"] == "fails" and rep.history["runs"] == 12 and rep.history["no_longer_made"] == 6
     edit(a, "== 60.0", "== 120.0")                                # edit a claim after seeing the result
-    paper(a).run(name="mine", device="cpu", say=quiet)
+    run(a)
     rep = paper(a).check()
-    assert rep.claims["c2"]["paper"] == "holds" and rep.history["claims_edited"] == ["c2"]
+    assert rep.claims["c2"] == "holds" and rep.history["claims_edited"] == ["c2"]
     assert len(paper(a).log.entries) == 6                         # the log holds only the calls the paper makes
 
 
-def test_invalid_and_differs():
+def test_invalid_and_too_large():
     d, a, b = setup()
-    paper(a).run(name="mine", device="cpu", say=quiet)
-    edit(a, "claim=c1 stated=2026-11-15 differs=scale", "claim=c1 stated=2026-11-15 differs=steps")
+    edit(a, "    return dict(w=d.x * 10)", "    return dict(w=d.x * 10, raw=list(range(20000)))")
+    said = []
+    paper(a).run(device="cpu", say=said.append)
+    assert any("the limit is" in s and "summary" in s for s in said)
     rep = paper(a).check()
-    assert rep.valid and not rep.ok and any("differs" in x for x in rep.problems)     # wrong, but the file is well formed
-    edit(a, "claim=c1 stated=2026-11-15 differs=steps", "claim=c1 stated=2026-11-15")
-    assert paper(a).check().ok                                    # the annotation is optional
-    edit(a, 'run("big", fit, d=nums, scale=2', 'run("big", fit, device="cuda", d=nums, scale=2')
+    assert rep.logged == 4 and rep.claims["c2"].startswith("open")
+    edit(a, 'call("big", fit, d=nums, scale=2', 'call("big", fit, device="cuda", d=nums, scale=2')
     rep = paper(a).check()
     assert not rep.valid and any("device" in x for x in rep.problems)
 
 
-def test_too_large():
-    d, a, b = setup()
-    edit(a, "    return dict(w=d.x * 10)", "    return dict(w=d.x * 10, raw=list(range(20000)))")
-    said = []
-    paper(a).run(name="mine", device="cpu", say=said.append)
-    assert any("the limit is" in s and "summary" in s for s in said)
-    rep = paper(a).check()
-    assert rep.calls["paper"]["missing"] == 2 and rep.claims["c2"]["paper"].startswith("open")
-
-
 def test_unreachable():
     d, a, b = setup()
-    paper(b).run(name="mine", device="cpu", deep=True, say=quiet)
-    assert paper(b).check().claims["not_so"]["paper"] == "holds"
+    run(a), run(b)
+    assert paper(b).check().claims["not_so"] == "holds"
     os.remove(os.path.join(d, "nums.txt"))                        # the data's URL is dead, the cache still has it
     assert paper(b).check().ok
     shutil.rmtree(os.path.join(d, "cache"))
@@ -251,41 +240,30 @@ def test_challenges_and_vault():
     v = tp.Vault(os.path.dirname(a))
     assert v.name == "toy" and list(v.papers) == ["a", "b", "c"] and v["a"].path == a
     assert paper(a).check().challenged_by == [dict(paper="b.md", claim="not_so", challenges="c1")]
-    v.run(name="mine", device="cpu", say=quiet)
+    assert v.tidy() == ["b", "c"] and v.tidy() == [] and "\nCites: [a](a.md)\n" in open(b).read()
+    v.run(device="cpu", say=quiet)
     reports = v.check()
-    assert all(r.ok for r in reports.values()) and reports["c"].claims == {"only": {"paper": "holds"}}
-    lines = [json.loads(l) for l in open(v.to_jsonl(os.path.join(d, "vault.jsonl")))]
-    assert [l["path"] for l in lines] == ["a.md", "b.md", "c.md"] and lines[0]["parts"][-2]["kind"] == "log"
-    r = paper(os.path.join(os.path.dirname(a), "c.md")).reproduce(device="cpu", say=quiet)
-    assert r.tier == "full" and r.claims == {"only": "holds"}, r
+    assert all(r.ok for r in reports.values()) and reports["c"].claims == {"only": "holds"}
+    r = v["c"].reproduce(device="cpu", say=quiet)                 # a paper with no calls: its claims read the cited logs
+    assert r.claims == {"only": "holds"} and (r.calls, r.rerun) == (0, 0), r
 
 
 def test_reproduce():
     d, a, b = setup()
-    assert paper(a).reproduce(upto="checked").tier == "checked"
-    paper(a).run(name="mine", device="cpu", say=quiet)
+    run(a)
     shutil.rmtree(os.path.join(d, "toy", "logs"))                 # reproduce from the paper alone
     tp.paper.PAPERS.clear()
-    r = paper(a).reproduce(upto="starts", device="cpu", name="r1", say=quiet)
-    assert r.tier == "starts" and r.coverage["starts"] == "6 of 6 calls started"
-    r = paper(a).reproduce(time=0.0, device="cpu", name="r2", say=quiet)        # no time: nothing is started
-    assert r.tier == "checked" and r.claims["c1"].startswith("not attempted"), r
-    r = paper(a).reproduce(upto="prefix", device="cpu", name="r3", say=quiet)
-    assert r.tier == "prefix" and "4 of 4 calls match the paper" in r.coverage["prefix"] and "exactly" in r.coverage["prefix"], r
-    assert {e.status for e in paper(a).local.logs["r3"].entries.values() if e.args.get("scale")} == {"stopped"}
-    r = paper(a).reproduce(time="10m", device="cpu", name="r3", say=quiet)      # continue the same rerun
-    assert r.tier == "full" and r.claims == dict(c1="holds", c2="holds") and r.needed == 0, r
-    assert "80 of 80 logged points agree" in r.coverage["full"]
-    seen = paper(a).check().claims["c1"]
-    assert paper(a).log.name == "mine" and seen["paper"] == "holds" and seen["r3"] == "holds" and seen["r1"].startswith("open"), seen
-    r = paper(a).reproduce(seeds="fresh", device="cpu", say=quiet)
-    assert r.tier == "robust" and r.log == "repro-cpu-fresh" and r.claims["c1"] == "holds", r
+    r = paper(a).reproduce(time=0.0, device="cpu", say=quiet)     # no time: nothing is started
+    assert r.checked and r.started == 0 and r.claims["c1"].startswith("not attempted"), r
+    r = paper(a).reproduce(device="cpu", full=False, say=quiet)   # the first points only
+    assert (r.started, r.compared, r.matched, r.attempted) == (6, 4, 4, 0) and r.rerun == 2, r   # two calls emit nothing, so they finished
+    r = paper(a).reproduce(time="10m", device="cpu", say=quiet)   # continue the same rerun
+    assert r.rerun == 6 and r.claims == dict(c1="holds", c2="holds") and r.needed == 0 and (r.points, r.points_agree) == (80, 80), r
+    assert len(paper(a).log.entries) == 6 and paper(a).check().ok       # the paper itself is untouched
     old = re.search(r'"emitted":\[\{"step":0,"loss":[^,]+,', open(a).read()).group(0)
     edit(a, old, '"emitted":[{"step":0,"loss":0.123,')            # a logged point the rerun does not give
-    r = paper(a).reproduce(upto="prefix", device="cpu", name="r4", say=quiet)
-    assert r.tier == "starts" and "3 of 4 calls match" in r.coverage["prefix"], r
-    r = paper(a).reproduce(device="cpu", name="r4", say=quiet)
-    assert r.tier == "full" and any("`prefix` did not pass" in w for w in r.warnings) and "60 of 80 logged points" in r.coverage["full"], r
+    r = paper(a).reproduce(device="cpu", say=quiet)
+    assert (r.compared, r.matched) == (4, 3) and (r.points, r.points_agree) == (80, 60) and r.held == 2, r
     r.text()
 
 
@@ -294,7 +272,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import tinypaper as tp
 tp.store.CACHE = sys.argv[3]
-print(len(tp.Paper.load(sys.argv[2]).run(name="mine", device="cpu", say=lambda *a: None)))
+print(len(tp.Paper.load(sys.argv[2]).run(device="cpu", say=lambda *a: None)))
 '''
 
 
@@ -323,15 +301,12 @@ def test_cite_from_another_vault():
     assert "local path" in paper(b).check().problems[0]
 
 
-def test_tidy_and_source():
-    d, a, b = setup("abc")
-    v = tp.Vault(os.path.dirname(a))
-    assert v.tidy() == ["b", "c"] and v.tidy() == []
-    assert "\nCites: [a](a.md)\n" in open(b).read() and paper(b).check().ok
+def test_source():
+    d, a, b = setup()
     edit(a, "def use(init):\n    return dict(total=float(sum(init[\"w\"])))",
          "class Thing:\n    def size(self):\n        return 1\n\n\ndef use(init):\n    from tinypaper import source\n"
          "    return dict(total=float(sum(init[\"w\"])), chars=len(source(use)), cls=source(Thing).splitlines()[0])")
-    paper(a).run(name="mine", device="cpu", say=quiet)
+    run(a)
     out = [e for e in paper(a).log.entries if e.fn == "fn:use"][0].out
     assert out["chars"] > 50 and out["cls"] == "class Thing:", out   # a call can read its own source, for example to charge for its length
 

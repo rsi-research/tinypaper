@@ -1,4 +1,4 @@
-# TinyPaper format, version 0.4
+# TinyPaper format, version 0.5
 
 A tiny paper is one markdown file that holds a research result in a form a program can check:
 its data sources, its code, the calls it makes, its claims, and a log of what those calls gave.
@@ -40,7 +40,7 @@ and is never evidence.
 ```
 ---
 title: A character bigram predicts Shakespeare better than character frequencies
-tinypaper: 0.4
+tinypaper: 0.5
 date: 2026-11-15
 ---
 ```
@@ -145,11 +145,11 @@ call that needs it, for example to charge an algorithm for the length of its cod
 ````
 ```python experiments
 for k in [1, 2, 4, 8]:
-    run("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
+    call("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
 ```
 ````
 
-The block only declares calls. `run(name, fn, env=None, seeds=None, **arguments)`:
+The block only declares calls. `call(name, fn, env=None, seeds=None, **arguments)`:
 
 - `fn` is the function to call, with `arguments` as keywords. An argument is a literal, a
   function, a data block, or another call. A call passed as an argument is replaced by its
@@ -161,7 +161,7 @@ The block only declares calls. `run(name, fn, env=None, seeds=None, **arguments)
   started on a CPU.
 - `name` is the experiment the call belongs to. An experiment is a named set of calls, and
   claims select calls by it.
-- `run` returns the call (a list of them with `seeds`), so it can be passed on.
+- `call` returns the call (a list of them with `seeds`), so it can be passed on.
 
 **A call's identity** is its function, its arguments, its seed, and the code it depends on.
 The experiment name is not part of it, so two experiments may share a call, and it runs once.
@@ -216,7 +216,7 @@ a seed means the same thing on every device and early points agree closely.
 ### `python claim=<id>`
 
 ````
-```python claim=c1 stated=2026-11-15 differs=n
+```python claim=c1 stated=2026-11-15
 def c1(r):
     return bpc(r.unigram) - bpc(r.bigram) > 1.0
 ```
@@ -228,7 +228,7 @@ paper's code and data.
 - `r.<experiment>` is the list of that experiment's logged calls. `.where(k=8)` keeps the calls
   with those argument values.
 - `r.<cite>.<experiment>` is a cited paper's calls. **A cited paper is always read from its own
-  log**, whichever log of this paper the claim is being evaluated on.
+  log.**
 - Each call has `.args`, `.seed`, `.emitted`, `.seconds` and `.out`.
 - Reading an experiment needs every one of its calls to be in the log: a claim does not see a
   sweep with holes in it.
@@ -236,9 +236,6 @@ paper's code and data.
 Header attributes:
 
 - `stated` (required): the date the claim was made.
-- `differs` (optional): what the author says differs among the calls whose output the claim
-  reads. It lists argument names, or `fn` if the function itself differs. The seed is ignored.
-  It is a statement about the claim, and `check` fails if it is wrong.
 - `challenges=<cite>.<claim>`: this claim disputes that claim of a cited paper.
 
 A claim is true or false. There is no third verdict. To say "better on average but not on
@@ -253,25 +250,30 @@ A claim's status is computed, never written:
 | open | a call it reads is not in the log |
 | error | the function raised |
 
+For a claim that evaluates, `check` also reports what differs among the calls it read: the
+argument names whose values differ, or `fn` if the calls use different functions. The author
+does not declare this. It is there so a reader can see at a glance what a claim compares.
+
 ### `log`
 
 ````
 ```log
-{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "gpu": "NVIDIA A40", "packages": {"torch": "2.6.0+cu124"}}, "history": {"runs": 43, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "gpu": "NVIDIA A40", "packages": {"torch": "2.6.0+cu124"}}, "history": {"runs": 43, "claims_edited": []}}
 {"call": "58044ec27e7560e4", "fn": "fn:train", "args": {...}, "seed": 1, "seconds": 41.7, "out": {"test_bpc": 2.33, "params": 875585}, "emitted": [{"step": 0, "loss": 6.02, "t": 0.31}, ...]}
 ```
 ````
 
 The runner writes this block, at the end of the paper, when the author runs it. Nobody writes
-it by hand. The first line names the log, the machine, and two counts from the history. Each
-further line is one call: its identity, function, arguments and seed, how long it took, what it
-returned, and what it emitted.
+it by hand. The first line holds the machine and two counts from the history. Each further line
+is one call: its identity, function, arguments and seed, how long it took, what it returned,
+and what it emitted.
 
 The log holds only calls the paper still makes, and only calls that finished.
 
 `paper.run()` runs every call that is not in the log; `only=[...]` limits it to some
-experiments. Several processes may run the same paper at once, for example one per GPU: each
-takes the next call nobody has started, and they do not overwrite each other.
+experiments. It does not run cited papers: `vault.run()` runs a whole vault, cited papers
+first. Several processes may run the same paper at once, for example one per GPU: each takes
+the next call nobody has started, and they do not overwrite each other.
 
 ### The history
 
@@ -279,7 +281,7 @@ Beside a vault, in a `logs/` folder that is not committed, the tools keep for ea
 history: every run ever made for it and every change to a claim's text, in order. It holds
 runs of calls the paper no longer makes, which is how much was tried. Two counts from it are
 written into the paper's log: how many runs were made, and which claims were edited after
-results existed. The same folder holds reruns made on this machine.
+results existed. The same folder holds the calls a reproduction has finished on this machine.
 
 ## 2. `check`
 
@@ -295,62 +297,56 @@ paper.
    hash where a cite gives one.
 2. Every data file of the paper and of the papers it cites is reachable with its stated hash.
 3. No claim raises.
-4. Where a claim declares `differs=` and evaluates, the declaration is right.
 
 It does not fail on a claim that is open or that fails, or on a call that is not in the log.
 
 It also reports:
 
-- each claim's status on the paper's log, and on every rerun kept on this machine;
-- how many of the paper's calls are logged and how many are not;
-- how the machine differed from the env (package versions, device);
+- each claim's status on the paper's log, and what differs among the calls it read;
+- how many of the paper's calls are logged;
+- pinned packages whose installed version was different on the machine that wrote the log;
 - claims of other papers in the vault that challenge this paper's claims;
 - from the history: runs made, how many were for calls the paper no longer makes, and claims
   edited after results existed;
-- lines of code in the paper, its cites, its installs, and installs from git.
+- lines of code in the paper, and its cites.
 
 ## 3. `reproduce`
 
 `paper.reproduce(time="10m")` reruns a paper on the machine it is called on, within a time
-limit. It makes a new log, kept on this machine, and reports the highest tier that log
-reaches. It never changes the paper, and cited papers are read from their own logs.
-
-| Tier | Reached when |
-|---|---|
-| valid | the paper is valid |
-| checked | `check` passes |
-| starts | every call starts on this machine: data loads, the function is called, a first point is emitted |
-| prefix | the first ten points of every compared call match the paper's log |
-| partial | at least one claim was rerun in full |
-| full | every call was rerun and every claim evaluated |
-| robust | the same with seeds the paper never used (`seeds="fresh"`) |
+limit, and reports how far it got as counts. It never changes the paper, and cited papers are
+read from their own logs.
 
 How the time is spent:
 
-1. Every call is taken ten emitted points. This gives `starts` and `prefix`, and measures this
-   machine's speed against the author's.
+1. Every call is taken its first ten emitted points, and they are compared with the paper's
+   log. This also measures this machine's speed against the author's.
 2. The time left goes to whole claims, cheapest first. A claim's cost is the logged time of the
    calls it reads, scaled by the measured speed. A claim is started only if it is expected to
-   fit.
+   fit. `full=False` skips this step.
 3. A call that emits is stopped when the time is up. A call that never emits cannot be stopped,
    so it is started only if it is expected to fit.
 
-The result carries the tier, what was done inside each tier, each claim's status, warnings,
-the measured speed, and the seconds still needed here to rerun everything. A claim whose calls
-were not rerun is "not attempted", never "fails". Calling `reproduce` again continues: finished
-calls are kept. After a full rerun the result also says how many of all the logged points
-agree with the paper.
+What it returns:
 
-- A tier counts only if the tiers before it were reached, with one exception: a full rerun is
-  stronger evidence than the tiers below it, so `full` and `robust` stand even if `checked`,
-  `starts` or `prefix` did not pass. The result then carries a warning naming what did not pass.
-- **Matching points.** If the rerun's machine and package versions equal the author's, the
-  emitted values must be equal. Otherwise arithmetic differs in the last digits and the
-  difference grows with every training step, so a value must be within 0.1% of the paper's.
-  Failing that, it must lie in the range of the paper's seeds at that point, widened on each
-  side by that range's width (1% of the value if there is one seed).
-- A rerun covers the paper's own calls. A full rerun of a paper says nothing new about the
-  papers it cites.
+| Count | Meaning |
+|---|---|
+| `checked` | whether `check` passed |
+| `started` of `calls` | calls that began on this machine: data loaded, the function was called |
+| `matched` of `compared` | calls whose first ten points agree with the paper's log |
+| `rerun` of `calls` | calls rerun to the end |
+| `points_agree` of `points` | over the calls rerun to the end: logged points that agree, counted in each call up to its first difference |
+| `claims` | each claim on the rerun: holds, fails, or not attempted |
+| `speed` | this machine's time for the first steps, relative to the author's |
+| `needed` | estimated seconds still needed here to rerun everything |
+
+- A claim whose calls were not rerun is "not attempted", never "fails".
+- Calling `reproduce` again continues: finished calls are kept beside the vault.
+- **Agreement.** An emitted value agrees with the paper's if it is within 0.1% of it. Two
+  machines do not give identical numbers: arithmetic differs in the last digits, and the
+  difference grows with every training step. So the first points agree closely, and later
+  points may not.
+- A rerun covers the paper's own calls. It says nothing new about the papers it cites.
+- Seeds are the paper's. To test other seeds, write a paper that makes those calls.
 
 ## Things that cannot be rerun
 

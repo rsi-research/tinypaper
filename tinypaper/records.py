@@ -1,13 +1,12 @@
 """Calls as claims see them, and how a call's output is written into a log."""
 import json, time
-from .model import Entry
 from .store import Unreachable
 
 LIMIT = 20000               # characters one call may add to a log; beyond it the call must log a summary
-PREFIX = 10                 # how many emitted points count as a call's first steps
+EARLY = 10                  # how many emitted points count as a call's first steps
 
 _current = None             # the call being run, or None
-_touched = None             # calls whose output a claim has read, while a claim is evaluated
+_read = None                # calls whose output a claim has read, while a claim is evaluated
 
 
 class Stop(Exception):
@@ -70,7 +69,7 @@ def fits(out, emitted):
                        "Log a summary of what it measured, and emit fewer points.")
 
 
-class Run:
+class Call:
     """One logged call as a claim sees it."""
 
     def __init__(self, paper, entry, experiment):
@@ -80,67 +79,67 @@ class Run:
 
     @property
     def out(self):
-        if _touched is not None and self not in _touched:
-            _touched.append(self)
+        if _read is not None and self not in _read:
+            _read.append(self)
         return self.entry.out
 
 
-class Runs(list):
+class Calls(list):
     def where(self, **kw):
         """The calls whose arguments have these values."""
         from .paper import canonical
-        return Runs(x for x in self if all(x.args.get(k) == canonical(v) for k, v in kw.items()))
+        return Calls(x for x in self if all(x.args.get(k) == canonical(v) for k, v in kw.items()))
 
 
 class Records:
     """`r` in a claim: r.<experiment> is that experiment's calls, r.<cite> is a cited paper's.
 
-    `log` names one log of this paper: None is the author's log, in the paper file; any other
-    name is a rerun kept beside the vault. A cited paper is always read from its author's log."""
+    `entries` is the log to read this paper's calls from: the paper's own by default, or a
+    rerun's. A cited paper is always read from its own log."""
 
-    def __init__(self, paper, log=None):
+    def __init__(self, paper, entries=None):
         self._paper = paper
-        self._entries, self._offset = paper.entries(log)
+        self._entries = paper.logged if entries is None else entries
 
     def __getattr__(self, key):
         paper = self._paper
         if key in paper.cites:
-            return Records(paper.cites[key].paper)
+            return Records(paper.cites[key])
         declared = [d for d in paper.declared() if d.name == key]
         if not declared:
             raise AttributeError(f"paper {paper.stem} declares no experiment `{key}`")
-        runs = Runs()
+        found = Calls()
         for d in declared:
-            entry = self._entries.get(d.id(self._offset))
-            if entry is None or entry.status != "done":
+            entry = self._entries.get(d.id)
+            if entry is None:
                 raise Open(f"{paper.stem}.{key} is not in the log")
-            runs.append(Run(paper, entry, key))
-        return runs
+            found.append(Call(paper, entry, key))
+        return found
 
 
-def evaluate(paper, claim, log=None):
+def evaluate(paper, claim, entries=None):
     """One claim on one log: (status, calls it read). Status is holds, fails, open or error."""
     from . import records
     from .paper import Namespace
-    records._touched = touched = []
+    records._read = read = []
     try:
         scope = Namespace(parent=paper.build())
         exec(compile(claim.source, f"{paper.path}:claim={claim.id}", "exec"), scope)
-        result = scope[claim.id](Records(paper, log))
-        return ("holds" if bool(result) else "fails"), touched
+        result = scope[claim.id](Records(paper, entries))
+        return ("holds" if bool(result) else "fails"), read
     except Open as e:
-        return "open: " + str(e), touched
+        return "open: " + str(e), read
     except Unreachable as e:
-        return "open: " + str(e), touched
+        return "open: " + str(e), read
     except Exception as e:
-        return f"error: {type(e).__name__}: {e}", touched
+        return f"error: {type(e).__name__}: {e}", read
     finally:
-        records._touched = None
+        records._read = None
 
 
-def differs(runs):
+def differ(calls):
     """What differs between calls: `fn` if the function does, else the argument names that do."""
-    if len({x.fn for x in runs}) > 1:
+    if len({x.fn for x in calls}) > 1:
         return ["fn"]
-    keys = sorted({k for x in runs for k in x.args})
-    return [k for k in keys if len({json.dumps(x.args.get(k), sort_keys=True) for x in runs}) > 1]
+    keys = sorted({k for x in calls for k in x.args})
+    return [k for k in keys if len({json.dumps(x.args.get(k), sort_keys=True) for x in calls}) > 1]

@@ -5,7 +5,7 @@ checked by running them. One file holds a result's data sources, code, experimen
 a log of what its runs gave. A tool compiles the file into a program, runs it, and reports which
 claims hold.
 
-> **Status: early.** The format is at version 0.4 ([SPEC.md](SPEC.md)). The tools work on the
+> **Status: early.** The format is at version 0.5 ([SPEC.md](SPEC.md)). The tools work on the
 > ten papers of the [example vault](example-vault). They are not yet exposed to agents as tools.
 
 ## Why
@@ -31,7 +31,7 @@ for people and is never evidence.
 | `env` | hardware and pinned packages |
 | `data` | files by URL and sha256, or data derived from other data, and the function that reads it |
 | `python code=<name>` | source code |
-| `python experiments` | the calls, declared with `run(...)` |
+| `python experiments` | the calls, declared with `call(...)` |
 | `python claim=<id>` | a function of the log that should return true |
 | `log` | what each call returned and emitted, written by the runner |
 
@@ -52,10 +52,10 @@ class Window(torch.nn.Module):
 
 ```python experiments
 for k in [1, 2, 4, 8]:
-    run("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
+    call("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
 ```
 
-```python claim=beats_counts stated=2026-11-15 differs=fn
+```python claim=beats_counts stated=2026-11-15
 def beats_counts(r):
     best = min(bpc(r.ng.sweep.where(n=n, alpha=a)) for n in [3, 4, 5, 6, 7] for a in [1.0, 0.03])
     return bpc(r.mlp.where(k=8)) < best
@@ -96,20 +96,21 @@ paper.claims                               # its claims; also .cites, .envs, .da
 print(paper.check().text())                # reachable? consistent? which claims hold on its log?
 
 result = paper.reproduce(time="10m")       # rerun on this machine, as far as ten minutes gets
-print(result.text())                       # the tier reached, each claim, and the time still needed
+print(result.text())                       # calls started and matching, claims rerun, and the time still needed
 
-paper.run(name="mine")                     # as the author: run what is not logged, and write the log into the paper
+paper.run()                                # as the author: run what is not logged, and write the log into the paper
                                            # (safe to call from several processes at once, one per GPU)
-vault.to_jsonl("vault.jsonl")              # every paper, with its log, as one line of JSON
+vault.run()                                # the same for every paper, cited papers first
 ```
 
 - **`check`** runs nothing. It fails if the paper breaks the format, or if something needed to
   rerun it is unreachable (a cited paper, a data file). It reports each claim's status, which
   calls are not logged, how the machine differed from the declared environment, and claims in
   other papers that challenge this one.
-- **`reproduce`** reports a tier, not a score: valid, checked, starts, prefix, partial, full,
-  robust. More time reaches a higher tier, and a second call continues where the first
-  stopped. A paper written for a GPU still reaches a tier on a CPU.
+- **`reproduce`** reports counts: how many calls started, how many match the paper on their
+  first points, how many were rerun to the end, and which claims held on the rerun. More time
+  gets further, and a second call continues where the first stopped. A paper written for a GPU
+  can still be started and compared on a CPU.
 
 ## The example vault
 

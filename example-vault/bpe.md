@@ -1,6 +1,6 @@
 ---
 title: Byte-pair tokens make a bigram much stronger, measured per character
-tinypaper: 0.4
+tinypaper: 0.5
 date: 2026-11-15
 ---
 
@@ -85,12 +85,12 @@ def tokenise(d, merges):
 ```
 
 ```python experiments
-run("bigram_tok0", ngram, d=tok0, n=2, env=base.cpu)
-run("chars", ngram, d=tok0, n=2, alpha=0.03, env=base.cpu)
-run("tokens", ngram, d=tok256, n=2, alpha=0.03, env=base.cpu)
+call("bigram_tok0", ngram, d=tok0, n=2, env=base.cpu)
+call("chars", ngram, d=tok0, n=2, alpha=0.03, env=base.cpu)
+call("tokens", ngram, d=tok256, n=2, alpha=0.03, env=base.cpu)
 ```
 
-```python claim=bridge stated=2026-11-15 differs=d
+```python claim=bridge stated=2026-11-15
 def bridge(r):
     # zero merges: exactly the score the root paper reports for its bigram
     return r.bigram_tok0[0].out["test_bpc"] == r.base.bigram[0].out["test_bpc"]
@@ -103,14 +103,14 @@ def coverage(r):
     return tok256.units[ids].float().mean().item() > 1.8
 ```
 
-```python claim=tokens_help stated=2026-11-15 differs=d
+```python claim=tokens_help stated=2026-11-15
 def tokens_help(r):
     # a bigram over tokens beats a bigram over characters by over half a bit per character
     return bpc(r.chars) - bpc(r.tokens) > 0.5
 ```
 
 ```log
-{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 3, "claims_edited": []}}
+{"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 3, "claims_edited": []}}
 {"call":"802d59e5a95ddb8a","fn":"fn:ngram","args":{"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
 {"call":"cb20930ba6c4642a","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.604349136352539,"val_bpc":3.5661234855651855,"train_bpc":3.5481133460998535,"at_word_start":4.402108192443848,"elsewhere":3.4198341369628906}}
 {"call":"160c5a0ed4276080","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok256","n":2},"seconds":0.02,"out":{"test_bpc":2.896505355834961,"val_bpc":2.824864387512207,"train_bpc":2.6760613918304443,"at_word_start":5.905152797698975,"elsewhere":5.438847541809082}}

@@ -1,5 +1,5 @@
 """Vault: a folder of papers."""
-import json, os
+import os
 
 VAULTS = {}
 
@@ -35,7 +35,7 @@ class Vault:
         ordered = {}
 
         def add(p):
-            for c in p._cited.values():
+            for c in p.cites.values():
                 if c.stem in found and c.stem not in ordered:
                     add(c)
             ordered[p.stem] = p
@@ -56,16 +56,10 @@ class Vault:
     def check(self):
         return {name: p.check() for name, p in self.papers.items()}
 
-    def run(self, name="author", device=None, say=print):
-        return [entry for p in self for entry in p.run(name, device, say=say)]
+    def run(self, device=None, say=print):
+        """Run every paper, cited papers first."""
+        return [got for p in self for got in p.run(device, say=say)]
 
     def tidy(self):
         """Bring every paper's derived parts up to date. Returns the names of the papers that changed."""
         return [name for name, p in self.papers.items() if p.tidy()]
-
-    def to_jsonl(self, path):
-        """Every paper, with its log, as one line of JSON."""
-        with open(path, "w") as f:
-            for p in self:
-                f.write(json.dumps(p.dump()) + "\n")
-        return path
