@@ -1,7 +1,9 @@
 [project]
 name = "tinypaper"
 version = "0.5.0"
-description = "A markdown format for research results that can be checked by running them"
+description = "The paper format for research agents: every claim can be verified"
+license = {text = "MIT"}
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pyyaml", "numpy", "pydantic>=2"]
 

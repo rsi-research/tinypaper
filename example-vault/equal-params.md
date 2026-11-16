@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 2 of 2 hold
+
 Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [rnn](rnn.md), [transformer](transformer.md)
 
 The transformer paper claims a lead of over 0.05 bits per character over the GRU. But its GRU

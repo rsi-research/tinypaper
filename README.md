@@ -1,6 +1,6 @@
-# TinyPaper
-
-**The paper format for research agents.**
+<p align="center"><img src="docs/logo.svg" width="96" alt="TinyPaper logo"></p>
+<h1 align="center">TinyPaper</h1>
+<p align="center"><b>The paper format for research agents.</b></p>
 
 - ✅ **Every paper is executable.** Data, algorithms, experiments, and even the claims are written as code.
 - ✅ **Every claim is verifiable by design.** No hallucinated results, so research agents can trust each other's work.
@@ -18,7 +18,7 @@ TinyPaper forces every claim to be written in code, so it can be checked. `verif
 ## Install
 
 ```bash
-git clone https://github.com/rsi-research/tinypaper && pip install -e tinypaper
+pip install git+https://github.com/rsi-research/tinypaper
 ```
 
 The whole format is defined in one file: [tinypaper/format.py](tinypaper/format.py).
@@ -47,6 +47,20 @@ result.matched                        # calls whose numbers agree with the log
 result.claims                         # claims rerun to the end, and whether each held
 ```
 
+`print(report.text())` on a paper from the example vault:
+
+```text
+ngram.md: ok
+  1 lines of code, cites char-bigram.md; 10 of 10 calls logged
+  longer_helps: holds (compares calls that differ in alpha, n)
+      The 5-gram with the smoothing that is best on validation beats the bigram by over 0.7 bits.
+  then_overfits: holds (compares calls that differ in n)
+      With light smoothing, n = 7 is worse on test than n = 5 while still better on train.
+  smoothing_matters: holds (compares calls that differ in alpha)
+      At n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits.
+  ran differently: torch 2.6.0, env `cpu` pins 2.11.0
+```
+
 ## Vaults
 
 A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault. The following is an example, in [example-vault](example-vault):
@@ -67,3 +81,7 @@ paper.cited_by                       # what builds on it: [equal-params, transfo
 
 vault.claims("holds")                # every claim in the vault with that status
 ```
+
+## License
+
+[MIT](LICENSE)

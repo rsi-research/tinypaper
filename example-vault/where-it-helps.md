@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 3 of 3 hold
+
 Cites: [char-bigram](char-bigram.md), [ngram](ngram.md), [rnn](rnn.md), [transformer](transformer.md)
 
 This paper runs nothing. Every cited paper logged its cost at the start of a word and

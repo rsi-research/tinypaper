@@ -355,20 +355,27 @@ class Paper(Strict, PaperVerify, PaperReproduce):
         with open(self.path, "w") as f:
             f.write(self._text)
 
+    def status_line(self):
+        """The line `tidy` writes under the header: how many of the paper's claims hold on its log."""
+        if not self.claims:
+            return ""
+        held = sum(records.evaluate(self, c)[0] == "holds" for c in self.claims)
+        return f"Claims: {'✅' if held == len(self.claims) else '❌'} {held} of {len(self.claims)} hold\n"
+
     def tidy(self):
-        """Rewrite the parts of the file that are derived from the rest: the line of links to the
-        papers it cites, the label above each block, and the id of any log entry written without one.
-        Returns whether the file changed."""
+        """Rewrite the parts of the file that are derived from the rest: the line saying how many
+        claims hold, the line of links to the papers it cites, the label above each block, and the
+        id of any log entry written without one. Returns whether the file changed."""
         cites = self._of("cite")
         line = "Cites: " + ", ".join(f"[{os.path.basename(c.at)[:-3]}]({c.at[2:] if c.at.startswith('./') else c.at})" for c in cites) + "\n"
         first = self.parts[0] if self.parts and self.parts[0].kind == "prose" else None
         if first is None:
             return False
-        text = re.sub(r"^Cites: .*\n\n?", "", first.text, flags=re.M)
-        if cites:
-            m = re.match(r"---\n.*?\n---\n\n?", text, re.S)
-            at = m.end() if m else 0
-            text = text[:at] + line + "\n" + text[at:]
+        text = re.sub(r"^(Cites|Claims): .*\n\n?", "", first.text, flags=re.M)
+        m = re.match(r"---\n.*?\n---\n\n?", text, re.S)
+        at = m.end() if m else 0
+        derived = "".join(x + "\n" for x in [self.status_line(), line if cites else ""] if x)
+        text = text[:at] + derived + text[at:]
         self.parts[0] = Prose(text=text)
         self.parts = fmt.labelled(self.parts)
         if self.log and any(e.call is None for e in self.log.entries):

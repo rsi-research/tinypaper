@@ -113,6 +113,10 @@ class PaperVerify:
                 report.compares[c.id] = differ(read)
             if status.startswith("error"):
                 problems.append(f"claim {c.id} raised an error: {status[7:]}")
+        import re
+        written = re.search(r"^Claims: .*\n", self._text or "", re.M)
+        if written and written.group(0) != self.status_line():
+            problems.append(f"invalid: the paper says `{written.group(0).strip()}` but its log gives `{self.status_line().strip()}`; paper.tidy() rewrites the line")
         report.lines = self.lines
         report.cites = sorted(os.path.basename(p.path) for p in self.cites.values())
         report.challenged_by = self.challenges()

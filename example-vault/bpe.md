@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 3 of 3 hold
+
 Cites: [char-bigram](char-bigram.md)
 
 A tokeniser changes the unit a model predicts, so bits per token cannot be compared with bits

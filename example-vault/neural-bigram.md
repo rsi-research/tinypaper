@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 1 of 1 hold
+
 Cites: [char-bigram](char-bigram.md)
 
 This paper adds the training loop that the neural language papers share. The loop reports its

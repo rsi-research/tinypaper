@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 1 of 1 hold
+
 Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [mlp-lm](mlp-lm.md)
 
 A GRU reads the whole window instead of the last eight characters. Everything else is cited.

@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 2 of 2 hold
+
 Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [ngram](ngram.md)
 
 The first version of this paper claimed that every doubling of the window helps. On the

@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 1 of 1 hold
+
 Cites: [char-bigram](char-bigram.md), [neural-bigram](neural-bigram.md), [transformer](transformer.md), [bpe](bpe.md)
 
 The first version of this paper predicted that tokens would help. They did not. The training

@@ -254,8 +254,12 @@ def test_challenges_and_vault():
     edit(b, "def not_so(r):\n", 'def not_so(r):\n    """Scale 3 gives a larger mean than scale 2."""\n')
     assert v.tidy() == ["b"] and "challenges `a.c1`): Scale 3 gives a larger mean than scale 2.\n\n```python claim" in open(b).read()
     assert v["b"].verify().statements == {"not_so": "Scale 3 gives a larger mean than scale 2."} and open(b).read().count("**Claim") == 1
+    assert "\nClaims: ❌ 0 of 2 hold\n\n" in open(a).read()        # nothing is logged yet
     for x in v:
         run(x.path)
+    assert any("paper.tidy()" in x for x in v["a"].verify().problems)          # the line it carries is now out of date
+    assert v.tidy() == ["a", "b", "c"] and "\nClaims: ✅ 2 of 2 hold\n\nSome prose" in open(a).read()
+    assert "\nClaims: ✅ 1 of 1 hold\n\nCites: [a](a.md)\n\n" in open(b).read()
     reports = v.verify()
     assert all(r.ok for r in reports.values()) and reports["c"].claims == {"only": "holds"}
     assert [x.stem for x in v["a"].cited_by] == ["b", "c"] and v["c"].cited_by == []

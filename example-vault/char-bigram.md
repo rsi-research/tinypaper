@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 2 of 2 hold
+
 This is the root of the language papers. It fixes the data, its layout (the `Text` dataclass),
 the split, what an experiment returns, and the metric. Its model has no training: it counts.
 

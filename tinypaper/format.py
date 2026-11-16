@@ -18,7 +18,8 @@ cite, env and data blocks are YAML with exactly the fields of their class; an un
 an error. Any other fence (```python with no attribute, ```bash, ...) is ordinary prose.
 A markdown viewer hides the words after ```python, so paper.tidy() writes a label line above
 each code, experiments, claim and log block (for example **Claim `larger_is_faster`**, with its
-statement). Do not write those lines yourself. Blocks may come in any order, except that the log is last. A paper with no log yet is valid:
+statement). Under the header it writes `Claims: ✅ 2 of 2 hold` and a `Cites:` line of links.
+Do not write those lines yourself; run paper.tidy() after any change, the log included. Blocks may come in any order, except that the log is last. A paper with no log yet is valid:
 its claims are open. A line starting with ``` always ends a block, so never write one inside.
 
 Cite names, env names, data names and everything the code defines share one namespace, and

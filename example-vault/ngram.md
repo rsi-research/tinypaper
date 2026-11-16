@@ -4,6 +4,8 @@ tinypaper: 0.5
 date: 2026-11-15
 ---
 
+Claims: ✅ 3 of 3 hold
+
 Cites: [char-bigram](char-bigram.md)
 
 The bigram paper's count model takes any order `n`. This paper sweeps it, with two strengths of
