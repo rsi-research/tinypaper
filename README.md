@@ -1,22 +1,22 @@
 # TinyPaper
 
 **Papers small enough to rerun.** TinyPaper is a markdown format for research results that can be
-checked by running them. One file holds a result's data sources, code, experiments and claims.
-A tool compiles the file into a program, runs it, and reports which claims hold.
+checked by running them. One file holds a result's data sources, code, experiments, claims and
+reported results. A tool compiles the file into a program, runs it, and reports which claims hold.
 
-> **Status: design draft.** This repository holds the format as two worked examples. The checker
-> and runner described below are not written yet.
+> **Status: early.** The format is at version 0.3 ([SPEC.md](SPEC.md)). The tools work on the
+> ten papers of the [example vault](example-vault). They are not yet exposed to agents as tools.
 
 ## Why
 
 Research agents can produce results faster than anyone can read them, and prose is a poor thing
 to trust: it can be wrong, stale, or written to mislead. A tiny paper is meant to be:
 
-- **Compact.** It holds only what is needed to regenerate a result, plus the claims still open.
-- **Linked.** It cites blocks of other papers (code, data, recorded results) instead of restating them.
-- **Executable.** Its blocks assemble into a pipeline: set up, fetch data, run experiments, evaluate claims.
-- **Checkable.** Each claim is a function over typed results that should return true, so anyone can rerun it.
-- **Readable by both.** Agents read the typed blocks. People read the prose around them.
+- **Compact.** It holds the code the paper contributes, its claims and its results. Everything else is cited or installed.
+- **Linked.** It cites other papers' code, data and results instead of restating them.
+- **Executable.** Its blocks assemble into a program: fetch data, run experiments, evaluate claims.
+- **Checkable.** Each claim is a function of the results that should return true, so anyone can rerun it.
+- **Readable by both.** Agents read the blocks. People read the prose around them.
 
 ## What a tiny paper looks like
 
@@ -27,106 +27,105 @@ for people and is never evidence.
 |---|---|
 | header | title, format version, date |
 | `cite` | another paper, under a short name |
-| `env` | hardware, pinned packages, known pitfalls |
-| `data` | files by URL and sha256, and the function that reads them |
-| `python code=<name>` | source code, in the file, joined into one module |
-| `experiment` | a function call with its environment and seeds; returns a typed result |
-| `python claim=<id>` | a Python function over experiment results that should return true |
+| `env` | hardware and pinned packages |
+| `data` | files by URL and sha256, or data derived from other data, and the function that reads it |
+| `python code=<name>` | source code |
+| `python experiments` | the runs, declared with `run(...)` |
+| `python claim=<id>` | a function of the results that should return true |
+| `results` | the small values each run returned, written by the runner |
 
-A claim, from [examples/mnist-mlp.md](examples/mnist-mlp.md):
-
-````markdown
-```experiment
-name: mlp
-call: train(mnist, mlp, epochs=5, seed={seed})
-env: cpu
-seeds: 3
-```
-
-```python claim=c2 stated=2026-11-14
-def c2(r):
-    return mean(x.test_acc for x in r.mlp) - mean(x.test_acc for x in r.linear) > 0.04
-```
-````
-
-A claim is an ordinary Python function. It receives `r`, where `r.<experiment>` is the list of
-that experiment's results, one per seed, and it can compute any statistic Python can.
-
-Three rules keep it honest:
-
-1. **All code is in the file.** There are no pointers to scripts whose output must be trusted. A
-   result is the value an experiment's function returns, not text a script printed.
-2. **A claim's status is computed, never written.** A claim whose experiments have recorded
-   results is reported as holding or failing. A claim without them is reported as open.
-3. **Prose is not evidence.** A number in the prose must link to a recorded result.
-
-## Linking
-
-One `cite` line gives another paper a short name. That name then works in code, in experiments
-and in claims. From [examples/mnist-cnn.md](examples/mnist-cnn.md):
+From [example-vault/mlp-lm.md](example-vault/mlp-lm.md):
 
 ````markdown
 ```cite
-name: base
-at: ./mnist-mlp.md
+name: nb
+at: ./neural-bigram.md
 ```
 
 ```python code=model
-from base import train          # the same training loop, metric and result type
+from nb import train        # the training loop of an earlier paper
+
+class Window(torch.nn.Module):
+    ...
 ```
 
-```experiment
-name: cnn
-call: train(base.mnist, cnn, epochs=5, seed={seed})
-env: base.cpu
+```python experiments
+for k in [1, 2, 4, 8]:
+    run("mlp", train, d=base.text, make=window, k=k, steps=3000, seeds=2, env=base.cpu)
 ```
 
-```python claim=c1 stated=2026-11-14
-def c1(r):
-    return mean(x.test_acc for x in r.cnn) - mean(x.test_acc for x in r.base.mlp) > 0.005
+```python claim=beats_counts stated=2026-11-15 differs=fn
+def beats_counts(r):
+    best = min(bpc(r.ng.sweep.where(n=n, alpha=a)) for n in [3, 4, 5, 6, 7] for a in [1.0, 0.03])
+    return bpc(r.mlp.where(k=8)) < best
 ```
 ````
 
-The CNN paper is about ten lines of new code. Its data, training loop, metric and baseline
-numbers all come from the MLP paper, so the model is the only thing that differs between the
-two. A cite to a paper in another repository is pinned to a commit and a content hash.
+## Papers, vaults, logs and the store
 
-The checker records which results a claim reads. Results that a claim compares must share the
-same data, the same metric code and the same result type, and every block is hashed, so this is
-checked mechanically.
+- A **vault** is a flat folder of papers in a git repository. Anyone can host one. This
+  repository holds the tools and one [example vault](example-vault).
+- A paper reports its own results: the small values each run returned are written into the
+  paper by the runner. With the paper alone you can read them, cite them, and rerun the paper.
+- **Logs** are everything too large for the paper: full run outputs and the run log. They are
+  optional. With them you can recompute anything from the raw outputs.
+- A **store** is where logs are shared. This repository's store is the public dataset
+  [rsi-research-org/tinypaper-store](https://huggingface.co/datasets/rsi-research-org/tinypaper-store),
+  set in [tinypaper.toml](tinypaper.toml). A token, when a store needs one, goes in a `.env`
+  file (see [.env.example](.env.example)).
 
-Some result fields depend on the machine, such as training time. They are declared with the
-`Timing` type, and a claim may compare them only when one run of the pipeline produced both.
-The CNN paper therefore reruns the MLP itself for its cost claim, and uses the MLP paper's
-recorded results only for its accuracy claim.
+The rules that keep it honest:
 
-## Checking and reproducing
+1. **The paper's own code is in the file.** A result is the value a function returned, not text a script printed.
+2. **A claim's status is computed, never written.** It holds, fails, or is open.
+3. **Prose is not evidence.** Results are written by the runner, and `check` says whether they are only reported or also backed by logs.
+4. **Everything is logged.** The run log records every run made for a paper and every edit to a claim, so a reader can see how much was tried.
 
-Two operations are planned:
+## Using it
 
-- **check** confirms that every link resolves, every hash matches and every recorded result was
-  produced by the current blocks, then evaluates each claim on the results recorded beside the
-  file. A paper that depends on something unreachable fails the check.
-- **reproduce** ignores the recorded results and runs the whole pipeline again, with seeds the
-  reproducer picks. It reports a score: the fraction of claims that still hold.
+```python
+import tinypaper as tp
 
-Setting up an environment on a new machine is the step most likely to fail. A reproduction that
-cannot run an experiment reports its claims as "not attempted", not as refuted.
+vault = tp.Vault("example-vault")          # a folder of papers
+paper = vault["transformer"]               # one paper, as typed parts
 
-## Examples
+paper.claims                               # its claims; also .cites, .envs, .data, .code, .results
+print(paper.check().text())                # reachable? consistent? which claims hold on the reported results?
 
-- [examples/mnist-mlp.md](examples/mnist-mlp.md): an MLP against a linear classifier on MNIST.
-  It has two claims and one more about a wider MLP.
-- [examples/mnist-cnn.md](examples/mnist-cnn.md): a follow-up that cites the MLP paper and adds a CNN.
-  It has an accuracy claim against the MLP's recorded results and a cost claim against a rerun.
+paper.load_logs()                          # optional: fetch the full outputs from the store
+print(paper.check().text())                # now also checks that the logs agree with the paper
 
-The code and claims in both examples have been run by hand, with two seeds, to confirm they work;
-every claim returned true. Neither example has recorded results yet, because the runner that writes them does not exist, so every
-claim in them is currently open.
+result = paper.reproduce(time="10m")       # rerun on this machine, as far as ten minutes gets
+print(result.text())                       # the tier reached, each claim, and the time still needed
+
+paper.run(name="mine")                     # as the author: run what has no fresh result, and write the results block
+paper.push()                               # upload the logs to the store
+vault.to_jsonl("vault.jsonl")              # every paper as one line of JSON
+```
+
+- **`check`** runs nothing. It fails if the paper breaks the format, if something needed to
+  rerun it is unreachable (a cited paper, a data file), or if the logs contradict what the
+  paper reports. It reports each claim's status, stale results, how the machine differed from
+  the declared environment, and claims in other papers that challenge this one.
+- **`reproduce`** reports a tier, not a score: valid, checked, starts, prefix, partial, full,
+  robust. More time reaches a higher tier, and a second call continues where the first
+  stopped. A paper written for a GPU still reaches a tier on a CPU.
+
+## The example vault
+
+Ten papers on character-level language modelling, from a counted bigram to a transformer.
+[PLAN.md](PLAN.md) lists what each one tests and what is planned next. They include a paper
+that defines no code, a paper with no runs, a tokeniser whose data is derived by code, and a
+paper that challenges another's claim.
+
+## Tests
+
+```bash
+python tests/test_tinypaper.py
+```
 
 ## Roadmap
 
-1. Write the format down as a specification.
-2. Build the checker: parse the blocks, resolve links, evaluate claims on recorded results.
-3. Build the runner: assemble a paper into a program, run it, and record the results.
-4. Expose check and reproduce to agents as tools.
+1. Check every submitted paper automatically in CI.
+2. Write the vision examples and the papers that join the two sets.
+3. Expose `check`, `run` and `reproduce` to agents as tools.

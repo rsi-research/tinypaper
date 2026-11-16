@@ -1,0 +1,4 @@
+# The vault's name in the store, and where the store is.
+# Papers are in git. The store holds only logs: full run outputs and the run log. It is optional.
+name = "example-vault"
+store = "https://huggingface.co/datasets/rsi-research-org/tinypaper-store/resolve/main"
