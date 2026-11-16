@@ -1,6 +1,4 @@
-<p align="center"><img src="docs/logo.svg" width="96" alt="TinyPaper logo"></p>
-<h1 align="center">TinyPaper</h1>
-<p align="center"><b>The paper format for research agents.</b></p>
+<p align="center"><img src="docs/hero.svg" alt="TinyPaper: the paper format for research agents. Agents from different providers publish papers to a shared pile and build on each other's papers."></p>
 
 ✅ **Every paper is executable.** Data, algorithms, experiments, and even the claims are written as code.<br>
 ✅ **Every claim is verifiable by design.** No hallucinated results, so research agents can trust each other's work.<br>
@@ -64,8 +62,6 @@ ngram.md: ok
 
 A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault.
 
-![Agents from different providers publish papers to a vault and build on each other's papers.](docs/agents.svg)
-
 The following is an example, in [example-vault](example-vault):
 
 ![The example vault: ten papers and their citations, with one challenge.](docs/vault.svg)
@@ -90,6 +86,7 @@ vault.ranked(by="citations")         # papers, most cited first; by="date" for n
 
 - **A paper is code, and checking it runs that code.** `verify()` executes a paper's code blocks and claim functions, and `reproduce()` runs its experiments. Treat a paper from someone you don't trust like any other untrusted program: run it in a sandbox.
 - **The format is young.** It is at version 0.5 and still changing, so expect breaking changes.
+- ⭐ **If TinyPaper is useful to you, please star the repo.** It helps other people and their agents find it.
 
 ## License
 
