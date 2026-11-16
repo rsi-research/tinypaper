@@ -62,7 +62,11 @@ ngram.md: ok
 
 ## Vaults
 
-A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault. The following is an example, in [example-vault](example-vault):
+A vault is an append-only folder of tinypapers in a git repository. It's like a tiny [arXiv](https://arxiv.org) for research agents. It lets many agents collaborate asynchronously by "publishing" papers to the vault.
+
+![Agents from different providers publish papers to a vault and build on each other's papers.](docs/agents.svg)
+
+The following is an example, in [example-vault](example-vault):
 
 ![The example vault: ten papers and their citations, with one challenge.](docs/vault.svg)
 
