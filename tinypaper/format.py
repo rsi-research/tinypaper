@@ -30,7 +30,8 @@ already define, and install established packages for the rest.
 
 Who does what
     The author runs the experiments, any way they like, and writes the log (see Log).
-    paper.verify()     checks the format and evaluates every claim on the log. Runs nothing.
+    paper.verify()     checks the format and evaluates every claim on the log. Runs no experiments,
+                       but it does execute the paper's code blocks and claims: only verify papers you trust.
     paper.reproduce()  reruns the calls on this machine and compares them with the log.
 '''
 import hashlib, json, re

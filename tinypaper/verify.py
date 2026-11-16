@@ -62,7 +62,7 @@ def version_mismatch(envs, where):
 
 class PaperVerify:
     def verify(self):
-        """Verify the paper. Runs nothing.
+        """Verify the paper. Runs no experiments, but executes the paper's code blocks and claim functions.
 
         It fails if the paper breaks the format, if something needed to rerun it is unreachable (a
         cited paper, a data file), or if a claim does not hold. Claims are evaluated on the paper's

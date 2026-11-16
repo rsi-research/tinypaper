@@ -38,7 +38,7 @@ import tinypaper as tp
 
 paper = tp.Paper.load("paper.md")
 
-report = paper.verify()               # seconds, runs nothing: checks the format and every claim against the reported log
+report = paper.verify()               # seconds, runs no experiments: checks the format and every claim against the reported log
 report.ok                             # True if the paper is well formed and every claim holds
 report.claims                         # {"beats_rnn": "holds", ...}
 
@@ -58,7 +58,6 @@ ngram.md: ok
       With light smoothing, n = 7 is worse on test than n = 5 while still better on train.
   smoothing_matters: holds (compares calls that differ in alpha)
       At n = 5, alpha = 0.03 beats alpha = 1 by more than 0.2 bits.
-  ran differently: torch 2.6.0, env `cpu` pins 2.11.0
 ```
 
 ## Vaults
@@ -81,6 +80,11 @@ paper.cited_by                       # what builds on it: [equal-params, transfo
 
 vault.claims("holds")                # every claim in the vault with that status
 ```
+
+## Before you use it
+
+- **A paper is code, and checking it runs that code.** `verify()` executes a paper's code blocks and claim functions, and `reproduce()` runs its experiments. Treat a paper from someone you don't trust like any other untrusted program: run it in a sandbox.
+- **The format is young.** It is at version 0.5 and still changing, so expect breaking changes.
 
 ## License
 

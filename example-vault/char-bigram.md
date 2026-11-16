@@ -21,8 +21,8 @@ about the test split.
 
 ```env
 name: cpu
-hardware: 2 CPU, 8 GB
-packages: [ "torch==2.11.0" ]
+hardware: 1 GPU (the log was made on an NVIDIA A40); a CPU also works
+packages: [ "torch==2.6.0" ]
 ```
 
 ```data
