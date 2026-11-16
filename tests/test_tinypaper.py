@@ -263,6 +263,10 @@ def test_challenges_and_vault():
     reports = v.verify()
     assert all(r.ok for r in reports.values()) and reports["c"].claims == {"only": "holds"}
     assert [x.stem for x in v["a"].cited_by] == ["b", "c"] and v["c"].cited_by == []
+    assert [x.stem for x in v.ranked()] == ["a", "b", "c"] and [x.stem for x in v.ranked("citations")][0] == "a"
+    edit(v["c"].path, "date: 2026-11-16", "date: 2026-12-01")
+    assert [x.stem for x in v.ranked(by="date")] == ["c", "a", "b"]
+    edit(v["c"].path, "date: 2026-12-01", "date: 2026-11-16")
     assert v.claims("holds") == {"a.c1": "holds", "a.c2": "holds", "b.not_so": "holds", "c.only": "holds"} and v.claims("fails") == {}
     r = v["c"].reproduce(device="cpu", say=quiet)                 # a paper with no calls: its claims read the cited logs
     assert r.claims == {"only": "holds"} and (r.calls, r.rerun) == (0, 0), r

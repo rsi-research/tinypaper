@@ -79,6 +79,7 @@ paper.cites                          # what it builds on: {"base": char-bigram, 
 paper.cited_by                       # what builds on it: [equal-params, transformer-bpe, where-it-helps]
 
 vault.claims("holds")                # every claim in the vault with that status
+vault.ranked(by="citations")         # papers, most cited first; by="date" for newest first
 ```
 
 ## Before you use it

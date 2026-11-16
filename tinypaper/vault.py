@@ -63,6 +63,23 @@ class Vault:
         found = {f"{name}.{c}": s for name, r in self.verify().items() for c, s in r.claims.items()}
         return {k: s for k, s in found.items() if status is None or s.split()[0].rstrip(":") == status}
 
+    def ranked(self, by="citations"):
+        """The papers, most cited first (by="citations") or newest first (by="date").
+
+        Citations are counted inside this vault: how many of its papers cite the paper directly.
+        The date is the one in the paper's header. Ties keep the vault's order."""
+        papers = list(self.papers.values())
+        if by == "citations":
+            count = {p.path: 0 for p in papers}
+            for p in papers:
+                for c in {c.path for c in p.cites.values()}:
+                    if c in count:
+                        count[c] += 1
+            return sorted(papers, key=lambda p: -count[p.path])
+        if by == "date":
+            return sorted(papers, key=lambda p: p.header.date, reverse=True)
+        raise ValueError(f'rank by "citations" or "date", not {by!r}')
+
     def tidy(self):
         """Bring every paper's derived parts up to date. Returns the names of the papers that changed."""
         return [name for name, p in self.papers.items() if p.tidy()]
