@@ -1,6 +1,6 @@
 ---
 title: Byte-pair tokens make a bigram much stronger, measured per character
-tinypaper: 0.3
+tinypaper: 0.4
 date: 2026-11-15
 ---
 
@@ -109,9 +109,9 @@ def tokens_help(r):
     return bpc(r.chars) - bpc(r.tokens) > 0.5
 ```
 
-```results
-{"set": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}
-{"run":"0800bf14b21c09b4","experiment":"bigram_tok0","fn":"fn:ngram","args":{"d":"data:bpe/tok0","n":2},"seed":null,"code":"9cf167896b8b996d","seconds":0.02,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579},"logged":["test_bits"]}
-{"run":"2f2d72690a7990e5","experiment":"chars","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok0","n":2},"seed":null,"code":"9cf167896b8b996d","seconds":0.03,"out":{"test_bpc":3.604349136352539,"val_bpc":3.5661234855651855,"train_bpc":3.5481133460998535},"logged":["test_bits"]}
-{"run":"13e7580f65b45572","experiment":"tokens","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok256","n":2},"seed":null,"code":"9cf167896b8b996d","seconds":0.02,"out":{"test_bpc":2.896505355834961,"val_bpc":2.824864387512207,"train_bpc":2.6760613918304443},"logged":["test_bits"]}
+```log
+{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 3, "claims_edited": []}}
+{"call":"802d59e5a95ddb8a","fn":"fn:ngram","args":{"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
+{"call":"cb20930ba6c4642a","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.604349136352539,"val_bpc":3.5661234855651855,"train_bpc":3.5481133460998535,"at_word_start":4.402108192443848,"elsewhere":3.4198341369628906}}
+{"call":"160c5a0ed4276080","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok256","n":2},"seconds":0.02,"out":{"test_bpc":2.896505355834961,"val_bpc":2.824864387512207,"train_bpc":2.6760613918304443,"at_word_start":5.905152797698975,"elsewhere":5.438847541809082}}
 ```

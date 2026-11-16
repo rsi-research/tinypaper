@@ -1,5 +1,5 @@
-"""The typed parts of a paper and of its logs. Each is a strict model: an unknown field is an error."""
-import hashlib
+"""The typed parts of a paper. Each is a strict model: an unknown field is an error."""
+import hashlib, json
 from dataclasses import dataclass
 from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -89,7 +89,7 @@ class Claim(Block):
     kind: Literal["claim"] = "claim"
     id: str
     stated: str
-    differs: list[str] = []
+    differs: Optional[list[str]] = None    # an optional statement about the claim, tested by check
     challenges: Optional[str] = None
     source: str
 
@@ -98,63 +98,45 @@ class Claim(Block):
         return sha(self.source)[:16]
 
 
-class Row(Strict):
-    """One run as the paper reports it: its identity and the small values it returned."""
-    run: str
-    experiment: str
+class Entry(Strict):
+    """What happened when one call ran: what its function returned and what it emitted."""
+    call: str                      # the call's identity
     fn: str
     args: dict[str, Any]
-    seed: Optional[int]
-    code: str                      # hash of the code that produced it
-    seconds: float
-    out: Any = None                # the small part of what the run returned
-    logged: list[str] = []         # the parts too large for the paper; they are in the logs
-    prefix: dict[str, list] = {}   # the first emitted values, for comparing a rerun
-    prefix_t: Optional[float] = None
-
-
-class Results(Block):
-    """The results block: the author's runs, written by the runner."""
-    kind: Literal["results"] = "results"
-    set: str
-    ran_on: dict[str, Any]
-    rows: list[Row] = []
-
-
-class Record(Strict):
-    """One run in full, as the logs hold it."""
-    id: str
-    experiment: str
-    fn: str
-    args: dict[str, Any]
-    seed: Optional[int]
-    env: Optional[str] = None
-    code: str
-    status: str                    # done, stopped or error
-    error: Optional[str] = None
-    seconds: float
-    ran_on: dict[str, Any]
-    emitted: list[dict[str, Any]] = []
+    seed: Optional[int] = None
+    seconds: float = 0
     out: Any = None
-    owner: Optional[str] = None    # while status is "running": the host and process doing it
-    started: Optional[float] = None
+    emitted: list[dict[str, Any]] = []
+    status: str = "done"           # done, stopped or error; a paper's log holds only calls that are done
+    error: Optional[str] = None
 
 
-class RecordSet(Strict):
-    """One machine's runs of a paper."""
+class Log(Block):
+    """The log block: the author's log, written into the paper by the runner."""
+    kind: Literal["log"] = "log"
+    name: str
+    ran_on: dict[str, Any] = {}
+    history: dict[str, Any] = {}   # counts from the history: runs made, claims edited after results existed
+    entries: list[Entry] = []
+
+
+class LocalLog(Strict):
+    """A log kept beside the vault and not in a paper: a rerun on this machine."""
     seed_offset: int = 0
-    runs: dict[str, Record] = {}
+    ran_on: dict[str, Any] = {}
+    entries: dict[str, Entry] = {}
 
 
-class Logs(Strict):
-    """Everything about a paper's runs that does not fit in the paper. Optional, kept in the store."""
-    sets: dict[str, RecordSet] = {}
-    events: list[dict[str, Any]] = []      # the run log: every run made and every claim edited
+class Local(Strict):
+    """What the tools keep beside the vault for one paper. None of it is part of the paper."""
+    logs: dict[str, LocalLog] = {}
+    history: list[dict[str, Any]] = []     # every run made and every claim edited, in order
+    running: dict[str, dict[str, Any]] = {}    # calls some process is running now, and which process
 
 
 @dataclass
 class Declared:
-    """One run an experiments block declares. It holds live functions, so it is not a model."""
+    """One call an experiments block declares, under one experiment name. It holds live functions."""
     paper: Any
     name: str
     fn: Any
@@ -164,6 +146,6 @@ class Declared:
     args: dict
 
     def id(self, offset=0):
-        import json
+        """The call's identity: its function, arguments, seed and code. The experiment name is not part of it."""
         seed = None if self.seed is None else self.seed + offset
-        return sha(json.dumps([self.name, "fn:" + self.fn.__name__, self.args, seed], sort_keys=True))[:16]
+        return sha(json.dumps(["fn:" + self.fn.__name__, self.args, seed, self.paper.code_hash], sort_keys=True))[:16]

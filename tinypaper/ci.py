@@ -55,7 +55,7 @@ def main(argv=None):
     lines = [f"## TinyPaper check: `{vault.name}`", "",
              f"{len(papers)} of {len(vault.papers)} papers ({why}). Installed: {', '.join(pins) or 'nothing'}. "
              f"Each paper was rerun for up to {args.time} on this runner.", "",
-             "| Paper | Check | Reported claims | Rerun here | Claims rerun | Still needed |", "|---|---|---|---|---|---|"]
+             "| Paper | Check | Claims on its log | Rerun here | Claims rerun | Still needed |", "|---|---|---|---|---|---|"]
     ok, details = True, []
     for p in papers:
         report = p.check()

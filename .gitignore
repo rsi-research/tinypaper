@@ -1,5 +1,4 @@
-.env
 __pycache__/
 *.egg-info/
-# logs live in the store, not in git
+# reruns and the history are local, not part of a vault
 logs/

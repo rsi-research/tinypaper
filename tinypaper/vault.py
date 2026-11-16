@@ -1,17 +1,15 @@
 """Vault: a folder of papers."""
 import json, os
-from . import store
 
 VAULTS = {}
 
 
 class Vault:
-    """A flat folder of papers. Its name and its store come from the nearest tinypaper.toml."""
+    """A flat folder of papers. Its name is the folder's name."""
 
     def __init__(self, path):
         self.path = os.path.abspath(path)
-        cfg = store.config(self.path)
-        self.name, self.store = cfg["name"], cfg["store"]
+        self.name = os.path.basename(self.path)
 
     @classmethod
     def of(cls, folder):
@@ -59,21 +57,15 @@ class Vault:
         return {name: p.check() for name, p in self.papers.items()}
 
     def run(self, name="author", device=None, say=print):
-        return [rec for p in self for rec in p.run(name, device, say=say)]
+        return [entry for p in self for entry in p.run(name, device, say=say)]
 
     def tidy(self):
         """Bring every paper's derived parts up to date. Returns the names of the papers that changed."""
         return [name for name, p in self.papers.items() if p.tidy()]
 
-    def load_logs(self):
-        return {name: p.load_logs(deep=False) for name, p in self.papers.items()}
-
-    def push(self):
-        return [p.push() for p in self if p.logs.sets or p.logs.events]
-
-    def to_jsonl(self, path, logs=False):
-        """Every paper as one line of JSON, optionally with its logs."""
+    def to_jsonl(self, path):
+        """Every paper, with its log, as one line of JSON."""
         with open(path, "w") as f:
             for p in self:
-                f.write(json.dumps(p.dump(logs=logs)) + "\n")
+                f.write(json.dumps(p.dump()) + "\n")
         return path

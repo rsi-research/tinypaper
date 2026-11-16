@@ -1,22 +1,21 @@
-"""Paper: one markdown file as a tree of typed parts. Parsing, rendering, its namespace and its runs."""
-import ast, fcntl, importlib.metadata, inspect, json, linecache, os, platform, re, socket, sys, time, types
+"""Paper: one markdown file as a tree of typed parts. Parsing, rendering, its namespace and its calls."""
+import fcntl, importlib.metadata, inspect, json, linecache, os, platform, re, socket, sys, time, types
 from contextlib import contextmanager
 from typing import Annotated, Any, Optional, Union
 import yaml
 from pydantic import Field, PrivateAttr, ValidationError
 from . import records, store
 from .check import PaperChecks
-from .model import (Cite, Claim, Code, Data, Declared, Env, Experiments, Header, Logs, Prose, Record, RecordSet, Results,
-                    Row, Strict, sha)
-from .records import Stop, decode, encode, to_row
+from .model import (Cite, Claim, Code, Data, Declared, Entry, Env, Experiments, Header, Local, LocalLog, Log, Prose, Strict, sha)
+from .records import Stop, TooLarge, encode, fits
 from .reproduce import PaperReproduce
 from .store import Unreachable
 
 FENCE = re.compile(r"^```([^\n`]+)\n(.*?)^```[ \t]*$", re.S | re.M)
-KINDS = {"cite", "env", "data", "python", "results"}
-NAMES = {}      # id(object) -> canonical name, for data objects passed as run arguments
+KINDS = {"cite", "env", "data", "python", "log"}
+NAMES = {}      # id(object) -> canonical name, for data objects passed as call arguments
 PAPERS = {}     # absolute path -> Paper
-Part = Annotated[Union[Prose, Cite, Env, Data, Code, Experiments, Claim, Results], Field(discriminator="kind")]
+Part = Annotated[Union[Prose, Cite, Env, Data, Code, Experiments, Claim, Log], Field(discriminator="kind")]
 
 
 class Namespace(dict):
@@ -36,7 +35,7 @@ class Namespace(dict):
 
 
 def canonical(v):
-    """A JSON value that names a run argument: literals as they are, objects by name."""
+    """A JSON value that names a call argument: literals as they are, objects by name."""
     if v is None or isinstance(v, (bool, int, float, str)):
         return v
     if isinstance(v, (list, tuple)):
@@ -46,23 +45,23 @@ def canonical(v):
     if id(v) in NAMES:
         return NAMES[id(v)]
     if isinstance(v, Declared):
-        return "run:" + v.id()
+        return "call:" + v.id()
     if callable(v):
         return "fn:" + getattr(v, "__name__", type(v).__name__)
-    raise TypeError(f"run argument {v!r} is not a literal, a function, a data block or a run")
+    raise TypeError(f"call argument {v!r} is not a literal, a function, a data block or a call")
 
 
 def block_text(part):
     """A block as markdown, written from its fields."""
-    if part.kind == "results":
-        lines = [json.dumps(dict(set=part.set, ran_on=part.ran_on))] + [r.model_dump_json(exclude_defaults=True) for r in part.rows]
-        return "```results\n" + "\n".join(lines) + "\n```"
+    if part.kind == "log":
+        meta = dict(log=part.name, ran_on=part.ran_on, history=part.history)
+        return "```log\n" + "\n".join([json.dumps(meta)] + [e.model_dump_json(exclude_defaults=True) for e in part.entries]) + "\n```"
     if part.kind == "code":
         return f"```python code={part.name}\n{part.source}```"
     if part.kind == "experiments":
         return f"```python experiments\n{part.source}```"
     if part.kind == "claim":
-        head = f"claim={part.id} stated={part.stated}" + (f" differs={','.join(part.differs)}" if part.differs else "")
+        head = f"claim={part.id} stated={part.stated}" + (f" differs={','.join(part.differs)}" if part.differs is not None else "")
         return f"```python {head}" + (f" challenges={part.challenges}" if part.challenges else "") + f"\n{part.source}```"
     fields = part.model_dump(by_alias=True, exclude={"raw", "kind"}, exclude_defaults=True)
     return f"```{part.kind}\n" + yaml.safe_dump(fields, sort_keys=False) + "```"
@@ -71,19 +70,20 @@ def block_text(part):
 def parse_block(kind, attrs, body, raw):
     if kind in ("cite", "env", "data"):
         return {"cite": Cite, "env": Env, "data": Data}[kind].model_validate({**yaml.safe_load(body), "raw": raw})
-    if kind == "results":
+    if kind == "log":
         lines = [json.loads(l) for l in body.splitlines() if l.strip()]
-        return Results(set=lines[0]["set"], ran_on=lines[0]["ran_on"], rows=[Row.model_validate(l) for l in lines[1:]])
+        return Log(name=lines[0]["log"], ran_on=lines[0].get("ran_on", {}), history=lines[0].get("history", {}),
+                   entries=[Entry.model_validate(l) for l in lines[1:]])
     if attrs and attrs[0] == "experiments":
         return Experiments(source=body, raw=raw)
-    a = dict(x.split("=", 1) for x in attrs)
+    a = dict(x.split("=", 1) if "=" in x else (x, "") for x in attrs)
     if "code" in a:
         return Code(name=a["code"], source=body, raw=raw)
     if "claim" in a:
         if "stated" not in a:
             raise ValueError(f"claim {a['claim']} has no `stated` date")
         return Claim(id=a["claim"], stated=a["stated"], source=body, raw=raw, challenges=a.get("challenges"),
-                     differs=sorted(x for x in a.get("differs", "").split(",") if x))
+                     differs=sorted(x for x in a["differs"].split(",") if x) if "differs" in a else None)
     raise ValueError("a python block is `code=<name>`, `experiments` or `claim=<id>`")
 
 
@@ -96,7 +96,7 @@ def default_device():
 
 
 def ran_on(env, device):
-    """What a run actually ran on: installed versions of the env's pinned packages, and the device."""
+    """What a call actually ran on: installed versions of the env's pinned packages, and the device."""
     packages = {}
     for pin in (env.packages if env else []):
         name = pin if pin.startswith("git+") else re.split(r"[=<>@ ]", pin)[0]
@@ -111,6 +111,11 @@ def ran_on(env, device):
     return out
 
 
+def merged(machine, more):
+    """One description of a machine from the descriptions its calls gave."""
+    return {**machine, **more, "packages": {**machine.get("packages", {}), **more.get("packages", {})}}
+
+
 class Paper(Strict, PaperChecks, PaperReproduce):
     path: str
     header: Optional[Header] = None
@@ -118,7 +123,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
     problems: list[str] = []
     _ns: Any = PrivateAttr(None)
     _declared: Any = PrivateAttr(None)
-    _logs: Any = PrivateAttr(None)
+    _local: Any = PrivateAttr(None)
     _text: Any = PrivateAttr(None)
     _cited: Any = PrivateAttr(default_factory=dict)
     _unreachable: Any = PrivateAttr(default_factory=list)
@@ -177,26 +182,21 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         return paper
 
     def render(self):
-        """The paper as markdown. For a paper read from a file this is the file, with the results block rewritten."""
+        """The paper as markdown. For a paper read from a file this is the file, with the log block rewritten."""
         return "".join(p.text if p.kind == "prose" else (p.raw if p.raw is not None else block_text(p)) for p in self.parts)
 
-    def dump(self, logs=False):
-        """The paper as plain data, optionally with its logs. `Paper.from_dump` reads it back."""
+    def dump(self):
+        """The paper as plain data. `Paper.from_dump` reads it back."""
         out = self.model_dump(mode="json", by_alias=True)
         out["path"] = os.path.basename(self.path)
-        if logs:
-            out["logs"] = self.logs.model_dump(mode="json")
         return out
 
     @classmethod
     def from_dump(cls, data, folder="."):
         data = dict(data)
-        logs = data.pop("logs", None)
         data["path"] = os.path.join(os.path.abspath(folder), data["path"])
         paper = cls.model_validate(data)
         paper._text = paper.render()
-        if logs is not None:
-            paper._logs = Logs.model_validate(logs)
         return paper
 
     def _of(self, kind):
@@ -209,7 +209,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
     data = property(lambda self: {d.name: d for d in self._of("data")})
     code = property(lambda self: self._of("code"))
     claims = property(lambda self: self._of("claim"))
-    results = property(lambda self: (self._of("results") or [None])[0])
+    log = property(lambda self: (self._of("log") or [None])[0])
     lines = property(lambda self: sum(len([l for l in c.source.splitlines() if l.strip()]) for c in self.code))
 
     @property
@@ -239,7 +239,7 @@ class Paper(Strict, PaperChecks, PaperReproduce):
 
     @property
     def code_hash(self):
-        """Hash of what a run's result can depend on: this paper's code and data blocks, and its cites'."""
+        """Hash of the code a call can depend on: this paper's code and data blocks, and its cites'."""
         parts = [c.source for c in self.code] + [d.model_dump_json(by_alias=True, exclude={"raw"}) for d in self.data.values()]
         parts += [a + ":" + p.code_hash for a, p in sorted(self._cited.items())]
         return sha("\n".join(parts))[:16]
@@ -291,7 +291,8 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         return obj
 
     def declared(self):
-        """Every run the experiments blocks declare, in order."""
+        """Every call the experiments blocks declare, in order, each under its experiment name.
+        The same call may appear under two names; it is one call."""
         if self._declared is None:
             out, ns = [], self.build()
 
@@ -310,88 +311,83 @@ class Paper(Strict, PaperChecks, PaperReproduce):
             self._declared = out
         return self._declared
 
-    # ---- its logs: kept beside the vault's papers, in logs/, and optionally in the store
+    def calls(self, only=None):
+        """The distinct calls behind the declared experiments, in order."""
+        seen = {}
+        for d in self.declared():
+            if not only or d.name in only:
+                seen.setdefault(d.id(), d)
+        return list(seen.values())
 
-    logs_path = property(lambda self: os.path.join(self.dir, "logs", self.stem + ".json"))
-    large_dir = property(lambda self: os.path.join(self.dir, "logs", self.stem + ".large"))
+    # ---- logs: the author's is in the file; reruns and the history are kept beside the vault, in logs/
+
+    local_path = property(lambda self: os.path.join(self.dir, "logs", self.stem + ".json"))
 
     @property
-    def logs(self):
-        if self._logs is None:
-            self._logs = Logs.model_validate_json(open(self.logs_path).read()) if os.path.exists(self.logs_path) else Logs()
-        return self._logs
+    def local(self):
+        if self._local is None:
+            self._local = Local.model_validate_json(open(self.local_path).read()) if os.path.exists(self.local_path) else Local()
+        return self._local
 
-    def save_logs(self):
-        os.makedirs(os.path.dirname(self.logs_path), exist_ok=True)
-        with open(self.logs_path + ".tmp", "w") as f:
-            f.write(self.logs.model_dump_json())
-        os.replace(self.logs_path + ".tmp", self.logs_path)
+    def save_local(self):
+        os.makedirs(os.path.dirname(self.local_path), exist_ok=True)
+        with open(self.local_path + ".tmp", "w") as f:
+            f.write(self.local.model_dump_json())
+        os.replace(self.local_path + ".tmp", self.local_path)
 
     @contextmanager
     def locked(self):
         """Hold this paper's lock and see what other processes have written. Several processes may
-        run one paper at once; each reads and writes its logs and results block only inside this."""
-        os.makedirs(os.path.dirname(self.logs_path), exist_ok=True)
-        with open(self.logs_path + ".lock", "w") as f:
+        run one paper at once; each reads and writes the log and the local file only inside this."""
+        os.makedirs(os.path.dirname(self.local_path), exist_ok=True)
+        with open(self.local_path + ".lock", "w") as f:
             fcntl.flock(f, fcntl.LOCK_EX)
             try:
-                if os.path.exists(self.logs_path):
-                    self._logs = Logs.model_validate_json(open(self.logs_path).read())
+                self._local = None
                 yield
             finally:
                 fcntl.flock(f, fcntl.LOCK_UN)
 
-    def load_logs(self, deep=True):
-        """Fetch this paper's logs from the store and add them to the local ones. Returns whether any were found.
+    def entries(self, log=None):
+        """({call identity: entry}, seed offset) for one log: the author's (None) or a local rerun by name."""
+        if log is None:
+            return ({e.call: e for e in self.log.entries} if self.log else {}), 0
+        kept = self.local.logs.get(log)
+        return (dict(kept.entries), kept.seed_offset) if kept else ({}, 0)
 
-        With deep=True the logs of the papers it cites are fetched too."""
-        found = False
-        if deep:
-            for p in self._cited.values():
-                found |= p.load_logs(True)
-        where = self.vault.store
-        data = store.fetch(where, f"{self.vault.name}/{self.stem}.json") if where else None
-        if data is not None:
-            self._logs = store.merge(Logs.model_validate_json(data), self.logs)
-            self.save_logs()
-            found = True
-        return found
+    def _disk_log(self):
+        """The log block as it is in the file now, which another process may have just written."""
+        m = re.search(r"^```log\n(.*?)^```[ \t]*$", open(self.path).read(), re.S | re.M)
+        return parse_block("log", [], m.group(1), m.group(0)) if m else None
 
-    def push(self, deep=False, tries=5):
-        """Upload this paper's logs to the store, merged with what is there. Returns the store path written."""
-        where = self.vault.store
-        if not where:
-            raise ValueError("no store is configured: set `store` in tinypaper.toml")
-        if deep:
-            for p in self._cited.values():
-                p.push(True, tries)
-        rel = f"{self.vault.name}/{self.stem}.json"
-        for _ in range(tries):
-            commit = store.head(where)
-            there = store.fetch(store.at_commit(where, commit), rel)
-            merged = store.merge(Logs.model_validate_json(there), self.logs) if there else self.logs
-            files = {rel: merged.model_dump_json().encode()}
-            for rs in merged.sets.values():
-                for rec in rs.runs.values():
-                    for digest in records.large_files(rec.out):
-                        local = os.path.join(self.large_dir, digest + ".npy")
-                        if os.path.exists(local):
-                            files[f"{self.vault.name}/{self.stem}.large/{digest}.npy"] = open(local, "rb").read()
-            if store.upload(where, files, f"{self.vault.name}/{self.stem}: logs", expect=commit):
-                self._logs = merged
-                self.save_logs()
-                return rel
-        raise RuntimeError(f"the store kept changing; gave up after {tries} tries")
+    def _note(self, **event):
+        self.local.history.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), **event))
+
+    def history_counts(self):
+        h = self.local.history
+        return dict(runs=sum(e["event"] == "run" for e in h),
+                    claims_edited=sorted({e["claim"] for e in h if e["event"] == "claim_edit" and e["after_results"] and not e["first"]}))
+
+    def note_claim_edits(self):
+        """Note in the history any claim whose text changed since it was last noted. Call inside the lock."""
+        last = {}
+        for e in self.local.history:
+            if e["event"] == "claim_edit":
+                last[e["claim"]] = e["hash"]
+        after = any(e["event"] == "run" and e["status"] == "done" for e in self.local.history)
+        for c in self.claims:
+            if last.get(c.id) != c.hash:
+                self._note(event="claim_edit", claim=c.id, hash=c.hash, first=c.id not in last, after_results=after)
 
     # ---- running it
 
-    def execute(self, d, name, device, max_emits=None, deadline=None, offset=0):
-        """Run one declared run into record set `name` of the logs and return its record."""
+    def execute(self, d, device, max_emits=None, deadline=None, offset=0, log=None):
+        """Run one call and return (its entry, the machine it ran on). Nothing is stored here."""
         call = {}
         for k, v in d.kw.items():
-            if isinstance(v, Declared):        # another run as an argument: its output, run first if needed
-                rec = v.paper.fresh(v, name, offset) or v.paper.execute(v, name, device, offset=offset)
-                v = decode(rec.out, v.paper)
+            if isinstance(v, Declared):        # another call as an argument: its output, run first if it is not logged
+                have = v.paper.entries(log)[0].get(v.id(offset))
+                v = (have or v.paper.execute(v, device, offset=offset, log=log)[0]).out
             call[k] = v
         seed = None if d.seed is None else d.seed + offset
         if seed is not None:
@@ -402,109 +398,102 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         records._current = stream = dict(stream=[], max=max_emits, deadline=deadline, start=start)
         out, status, error = None, "done", None
         try:
-            out = d.fn(**call)
+            out = encode(d.fn(**call))
+            fits(out, stream["stream"])
         except Stop:
             status = "stopped"
+        except TooLarge as e:
+            out, status, error = None, "error", str(e)
         except Exception as e:
             status, error = "error", f"{type(e).__name__}: {e}"
         finally:
             records._current = None
-        rec = Record(id=d.id(offset), experiment=d.name, fn="fn:" + d.fn.__name__, args=d.args, seed=seed,
-                     env=d.env.name if d.env else None, code=self.code_hash, status=status, error=error,
-                     seconds=round(time.time() - start, 2), ran_on=ran_on(d.env, device), emitted=stream["stream"],
-                     out=encode(out, self.large_dir) if status == "done" else None)
-        with self.locked():
-            self.logs.sets.setdefault(name, RecordSet(seed_offset=offset)).runs[rec.id] = rec
-            self.logs.events.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), event="run", set=name, experiment=d.name,
-                                         id=rec.id, args=d.args, seed=seed, code=self.code_hash, status=status, seconds=rec.seconds))
-            self.save_logs()
-        return rec
+        entry = Entry(call=d.id(offset), fn="fn:" + d.fn.__name__, args=d.args, seed=seed, seconds=round(time.time() - start, 2),
+                      out=out, emitted=stream["stream"], status=status, error=error)
+        return entry, ran_on(d.env, device)
 
-    def _taken(self, d, name):
-        """Is another live process already doing this run?"""
-        rs = self.logs.sets.get(name)
-        rec = rs.runs.get(d.id()) if rs else None
-        if rec is None or rec.status != "running" or rec.code != self.code_hash:
+    def _taken(self, d):
+        """Is another live process already running this call?"""
+        who = self.local.running.get(d.id())
+        if not who:
             return False
-        host, _, pid = (rec.owner or "").rpartition(":")
+        host, _, pid = who["owner"].rpartition(":")
         if host == socket.gethostname():
             try:
                 os.kill(int(pid), 0)
             except (OSError, ValueError):
                 return False                       # that process is gone
             return int(pid) != os.getpid()
-        return time.time() - (rec.started or 0) < 24 * 3600
-
-    def _disk_results(self):
-        """The results block as it is in the file now, which another process may have just written."""
-        m = re.search(r"^```results\n(.*?)^```[ \t]*$", open(self.path).read(), re.S | re.M)
-        return parse_block("results", [], m.group(1), m.group(0)) if m else None
-
-    def fresh(self, d, name, offset=0):
-        """The record of a declared run in set `name`, if it finished and the code has not changed since."""
-        rs = self.logs.sets.get(name)
-        rec = rs.runs.get(d.id(offset)) if rs else None
-        return rec if rec is not None and rec.status == "done" and rec.code == self.code_hash else None
-
-    def log_claim_edits(self):
-        """Note in the run log any claim whose text changed since it was last logged."""
-        events, last = self.logs.events, {}
-        for e in events:
-            if e["event"] == "claim_edit":
-                last[e["claim"]] = e["hash"]
-        changed = [c for c in self.claims if last.get(c.id) != c.hash]
-        existed = any(e["event"] == "run" and e["status"] == "done" for e in events)
-        for c in changed:
-            events.append(dict(time=time.strftime("%Y-%m-%dT%H:%M:%S"), event="claim_edit", claim=c.id, hash=c.hash,
-                               first=c.id not in last, records_existed=existed))
-        if changed:
-            self.save_logs()
+        return time.time() - who["started"] < 24 * 3600
 
     def run(self, name="author", device=None, deep=False, rerun=False, only=None, say=print):
-        """Run every declared run that has no fresh result, as the author.
+        """Run every declared call that is not in the author's log, and write the log into the paper.
 
-        The small values go into the paper's results block, and the paper file is rewritten. The
-        full outputs go to the logs, as record set `name`. With deep=True the cited papers run first.
-        `only` is a list of experiment names to run; the others are left as they are."""
+        The paper file is rewritten: its log block holds what each call returned and emitted. `name`
+        names the machine or occasion. With deep=True the cited papers run first. `only` is a list
+        of experiment names to run. Several processes may call this at once, for example one per
+        GPU: each takes the next call nobody has started."""
         device, done = device or default_device(), []
         self.tidy()
         if deep:
             for p in self._cited.values():
                 done += p.run(name, device, True, rerun, None, say)
-        declared = self.declared()
         with self.locked():
-            self.log_claim_edits()
-        for d in declared:
-            if only and d.name not in only:
-                continue
-            with self.locked():                    # take the next run nobody has done or is doing
-                old = self._disk_results()
-                rows = {r.run: r for r in old.rows} if old and old.set == name else {}
-                have = rows.get(d.id())
-                if (have is not None and have.code == self.code_hash and not rerun) or self._taken(d, name):
+            self.note_claim_edits()
+            self.save_local()
+        for d in self.calls(only):
+            with self.locked():                    # take the next call nobody has done or is doing
+                old = self._disk_log()
+                have = {e.call for e in old.entries} if old and old.name == name else set()
+                if (d.id() in have and not rerun) or self._taken(d):
                     continue
-                rec = self.fresh(d, name) if not rerun else None
-                if rec is None:
-                    self.logs.sets.setdefault(name, RecordSet()).runs[d.id()] = Record(
-                        id=d.id(), experiment=d.name, fn="fn:" + d.fn.__name__, args=d.args, seed=d.seed, code=self.code_hash,
-                        status="running", seconds=0, ran_on={}, owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
-                    self.save_logs()
-            if rec is None:
-                rec = self.execute(d, name, device)
-                done.append(rec)
-                say(f"{self.stem}: {d.name} {json.dumps({k: v for k, v in d.args.items() if not str(v).startswith(('fn:', 'data:'))})}"
-                    f" seed={d.seed} {rec.status} in {rec.seconds}s" + (f" ({rec.error})" if rec.error else ""))
-            if rec.status == "done":
-                with self.locked():                # add this run to whatever the results block holds now
-                    old = self._disk_results()
-                    same = old is not None and old.set == name
-                    rows = {r.run: r for r in old.rows} if same else {}
-                    machine = dict(old.ran_on) if same else {}
-                    rows[rec.id] = to_row(rec)
-                    keep = [rows[x.id()] for x in declared if x.id() in rows]      # only runs the paper still declares
-                    machine = {**machine, **rec.ran_on, "packages": {**machine.get("packages", {}), **rec.ran_on["packages"]}}
-                    self._write_results(Results(set=name, ran_on=machine, rows=keep))
+                self.local.running[d.id()] = dict(owner=f"{socket.gethostname()}:{os.getpid()}", started=time.time())
+                self.save_local()
+            entry, machine = self.execute(d, device)
+            done.append(entry)
+            say(f"{self.stem}: {d.name} {json.dumps({k: v for k, v in d.args.items() if not str(v).startswith(('fn:', 'data:'))})}"
+                f" seed={d.seed} {entry.status} in {entry.seconds}s" + (f" ({entry.error})" if entry.error else ""))
+            with self.locked():                    # add it to whatever the log holds now
+                self.local.running.pop(d.id(), None)
+                self._note(event="run", log=name, experiment=d.name, call=entry.call, args=d.args, seed=d.seed,
+                           status=entry.status, seconds=entry.seconds)
+                self.save_local()
+                if entry.status == "done":
+                    old = self._disk_log()
+                    same = old is not None and old.name == name
+                    kept = {e.call: e for e in old.entries} if same else {}
+                    kept[entry.call] = entry
+                    order = [x.id() for x in self.calls()]                         # only calls the paper still makes
+                    self._write_log(Log(name=name, ran_on=merged(old.ran_on if same else {}, machine), history=self.history_counts(),
+                                        entries=[kept[i] for i in order if i in kept]))
         return done
+
+    def _write_log(self, log):
+        parts = []
+        for p in self.parts:
+            if p.kind == "log":
+                continue
+            if p.kind == "prose" and parts and parts[-1].kind == "prose":
+                parts[-1] = Prose(text=parts[-1].text + p.text)
+            else:
+                parts.append(p)
+        if parts and parts[-1].kind == "prose":
+            parts[-1] = Prose(text=parts[-1].text.rstrip("\n") + "\n\n")
+        elif parts:
+            parts.append(Prose(text="\n\n"))
+        self.parts = parts + [log, Prose(text="\n")]
+        self._text = self.render()
+        with open(self.path, "w") as f:
+            f.write(self._text)
+
+    def keep(self, name, entry, machine, offset=0):
+        """Store a rerun's entry in the local log `name`, and note it in the history."""
+        with self.locked():
+            kept = self.local.logs.setdefault(name, LocalLog(seed_offset=offset))
+            kept.entries[entry.call] = entry
+            kept.ran_on = merged(kept.ran_on, machine)
+            self._note(event="run", log=name, call=entry.call, args=entry.args, seed=entry.seed, status=entry.status, seconds=entry.seconds)
+            self.save_local()
 
     def tidy(self):
         """Rewrite the parts of the file that are derived from the rest: the line of links to the
@@ -526,24 +515,6 @@ class Paper(Strict, PaperChecks, PaperReproduce):
         with open(self.path, "w") as f:
             f.write(self._text)
         return True
-
-    def _write_results(self, results):
-        parts = []
-        for p in self.parts:
-            if p.kind == "results":
-                continue
-            if p.kind == "prose" and parts and parts[-1].kind == "prose":
-                parts[-1] = Prose(text=parts[-1].text + p.text)
-            else:
-                parts.append(p)
-        if parts and parts[-1].kind == "prose":
-            parts[-1] = Prose(text=parts[-1].text.rstrip("\n") + "\n\n")
-        elif parts:
-            parts.append(Prose(text="\n\n"))
-        self.parts = parts + [results, Prose(text="\n")]
-        self._text = self.render()
-        with open(self.path, "w") as f:
-            f.write(self._text)
 
 
 class _Cited:

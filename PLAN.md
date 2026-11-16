@@ -3,7 +3,7 @@
 The examples are the test cases for the format. Each one exists to exercise a kind of
 dependency or a rule. This file lists the planned set, what each paper tests, and how far it is.
 
-Status of the set: the language papers are written in format 0.3 under `example-vault/` and run
+Status of the set: the language papers are written in format 0.4 under `example-vault/` and run
 with the checker and runner. The vision
 papers and the joining papers are not written.
 
@@ -31,11 +31,11 @@ papers and the joining papers are not written.
    pixel-lm   mnist-mlp + transformer  MNIST pixels as a sequence, in bits per pixel
 ```
 
-## Language papers (written, format 0.3)
+## Language papers (written, format 0.4)
 
 | Paper | Cites | What it tests in the format |
 |---|---|---|
-| `char-bigram` | none | the root: data, split, raw per-character outputs, metric; runs with no seed |
+| `char-bigram` | none | the root: data, split, metric, and what every later paper logs; calls with no seed |
 | `ngram` | char-bigram | a sweep written as a Python loop; a paper that defines no code |
 | `neural-bigram` | char-bigram | a bridge with a known answer: the trained table must match the counts |
 | `mlp-lm` | char-bigram, neural-bigram, ngram | three cites; claims against another paper's sweep |
@@ -44,7 +44,7 @@ papers and the joining papers are not written.
 | `bpe` | char-bigram | data derived from data by code; a metric whose unit changes; a claim about data alone |
 | `transformer-bpe` | char-bigram, neural-bigram, transformer, bpe | a merge: defines nothing, two parents share an ancestor |
 | `equal-params` | char-bigram, neural-bigram, rnn, transformer | a challenge to another paper's claim; choosing settings on validation |
-| `where-it-helps` | char-bigram, ngram, rnn, transformer | analysis only: no runs, claims over other papers' logs, open without them |
+| `where-it-helps` | char-bigram, ngram, rnn, transformer | analysis only: no runs, claims over what other papers chose to log |
 
 ## Vision papers (planned)
 
@@ -73,14 +73,13 @@ The format the papers use is defined in [SPEC.md](SPEC.md).
 ## What has been run
 
 Every paper in the example vault has been run in full by its author run, on one A40 GPU with
-PyTorch 2.6.0, and reports its results in its own results block. All 20 claims hold. `check`
-flags each paper as run differently from its declared environment (PyTorch 2.11.0 on CPU).
+PyTorch 2.6.0, and carries its log in its own file. All 20 claims hold. `check` flags each
+paper as run differently from its declared environment (PyTorch 2.11.0 on CPU).
 
-The logs are in the store named in `tinypaper.toml`. They hold that run as record set
-`a40-torch2.6`, and a second record set, `cpu-torch2.11`: a two-minute `reproduce` of each paper
-on the declared environment. There the four count-model and small papers reached `full`, and
-the five larger ones reached `prefix`, with all 28 neural runs matching the reported values on
-their first ten steps.
+Each paper was then given a two-minute `reproduce` on a CPU. The four cheap papers and
+`where-it-helps` reached `full`. The five larger ones reached `prefix`: all 26 of their calls
+match the paper's log on their first ten steps, and the rerun reports what a full rerun would
+need on that machine, from 3 minutes to 1.8 hours.
 
 | Model | Test bits per character |
 |---|---|

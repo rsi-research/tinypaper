@@ -1,15 +1,16 @@
 ---
 title: A character bigram predicts Shakespeare better than character frequencies
-tinypaper: 0.3
+tinypaper: 0.4
 date: 2026-11-15
 ---
 
 This is the root of the language papers. It fixes the data, its layout (the `Text` dataclass),
 the split, what an experiment returns, and the metric. Its model has no training: it counts.
 
-An experiment returns two things. The bits per character on each split are small, so they are
-reported in the paper. The cost in bits of every scored test character is large, so it goes
-to the logs, where later papers can ask new questions of it.
+A call logs a summary, not the cost of every character: the bits per character on each split,
+and on the test split the cost at the start of a word and elsewhere. The last two are there
+for later papers. Where a model's cost falls is a question someone will ask, and the log is all
+they will have unless they rerun the paper.
 
 Every paper that builds on this one scores the same characters: each split from position
 `skip` onward. The first `skip` characters are context only. So any two models can be compared
@@ -87,8 +88,7 @@ def ngram(d, n, alpha=1.0):
         p = (count(grams, gram_n, q) + alpha) / (count(ctxs, ctx_n, q // V) + alpha * V)
         return -torch.log2(p)
 
-    cost = {name: bits(part(d, name)) for name in ["test", "val", "train"]}
-    return dict({name + "_bpc": per_char(b, d, name) for name, b in cost.items()}, test_bits=cost["test"])
+    return summary({name: bits(part(d, name)) for name in ["test", "val", "train"]}, d)
 ```
 
 ```python code=metric
@@ -100,8 +100,20 @@ def per_char(bits, d, split):
     return (bits.sum() / d.units[part(d, split)[d.skip:]].sum()).item()
 
 
+def summary(cost, d):
+    # What every model in this line of papers logs. `cost` maps each split to the bits of its
+    # scored ids. A scored id starts a word if the id before it ends in a space or a newline.
+    ids = d.test[d.skip - 1:]
+    gap = torch.tensor([v[-1] in " \n" for v in d.vocab])
+    first = gap[ids[:-1]]
+    out = {name + "_bpc": per_char(b, d, name) for name, b in cost.items()}
+    out["at_word_start"] = cost["test"][first].mean().item()      # bits per id, test split
+    out["elsewhere"] = cost["test"][~first].mean().item()
+    return out
+
+
 def bpc(runs, split="test"):
-    # the reported bits per character, averaged over runs
+    # the logged bits per character, averaged over runs
     return mean(x.out[split + "_bpc"] for x in runs)
 ```
 
@@ -122,8 +134,8 @@ def c2(r):
     return bpc(r.bigram) < 3.7
 ```
 
-```results
-{"set": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}
-{"run":"cc113b7448b26487","experiment":"unigram","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":1},"seed":null,"code":"b665326ec5abf135","seconds":0.05,"out":{"test_bpc":4.850418567657471,"val_bpc":4.806154727935791,"train_bpc":4.73865270614624},"logged":["test_bits"]}
-{"run":"7129f2ce2fdd90b8","experiment":"bigram","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":2},"seed":null,"code":"b665326ec5abf135","seconds":0.03,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579},"logged":["test_bits"]}
+```log
+{"log": "a40-torch2.6", "ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}, "history": {"runs": 2, "claims_edited": []}}
+{"call":"e8ad8c83c4fffc9e","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":1},"seconds":0.05,"out":{"test_bpc":4.850418567657471,"val_bpc":4.806154727935791,"train_bpc":4.73865270614624,"at_word_start":5.6748151779174805,"elsewhere":4.65974235534668}}
+{"call":"ea59bb468f5ffee7","fn":"fn:ngram","args":{"d":"data:char-bigram/text","n":2},"seconds":0.06,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
 ```

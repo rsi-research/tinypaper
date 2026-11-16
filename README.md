@@ -2,9 +2,10 @@
 
 **Papers small enough to rerun.** TinyPaper is a markdown format for research results that can be
 checked by running them. One file holds a result's data sources, code, experiments, claims and
-reported results. A tool compiles the file into a program, runs it, and reports which claims hold.
+a log of what its runs gave. A tool compiles the file into a program, runs it, and reports which
+claims hold.
 
-> **Status: early.** The format is at version 0.3 ([SPEC.md](SPEC.md)). The tools work on the
+> **Status: early.** The format is at version 0.4 ([SPEC.md](SPEC.md)). The tools work on the
 > ten papers of the [example vault](example-vault). They are not yet exposed to agents as tools.
 
 ## Why
@@ -12,10 +13,10 @@ reported results. A tool compiles the file into a program, runs it, and reports 
 Research agents can produce results faster than anyone can read them, and prose is a poor thing
 to trust: it can be wrong, stale, or written to mislead. A tiny paper is meant to be:
 
-- **Compact.** It holds the code the paper contributes, its claims and its results. Everything else is cited or installed.
-- **Linked.** It cites other papers' code, data and results instead of restating them.
+- **Compact.** It holds the code the paper contributes, its claims and a short log. Everything else is cited or installed.
+- **Linked.** It cites other papers' code, data and logs instead of restating them.
 - **Executable.** Its blocks assemble into a program: fetch data, run experiments, evaluate claims.
-- **Checkable.** Each claim is a function of the results that should return true, so anyone can rerun it.
+- **Checkable.** Each claim is a function of the log that should return true, so anyone can rerun it.
 - **Readable by both.** Agents read the blocks. People read the prose around them.
 
 ## What a tiny paper looks like
@@ -30,9 +31,9 @@ for people and is never evidence.
 | `env` | hardware and pinned packages |
 | `data` | files by URL and sha256, or data derived from other data, and the function that reads it |
 | `python code=<name>` | source code |
-| `python experiments` | the runs, declared with `run(...)` |
-| `python claim=<id>` | a function of the results that should return true |
-| `results` | the small values each run returned, written by the runner |
+| `python experiments` | the calls, declared with `run(...)` |
+| `python claim=<id>` | a function of the log that should return true |
+| `log` | what each call returned and emitted, written by the runner |
 
 From [example-vault/mlp-lm.md](example-vault/mlp-lm.md):
 
@@ -61,29 +62,27 @@ def beats_counts(r):
 ```
 ````
 
-## Papers, vaults, logs and the store
+## Papers, vaults and logs
 
 - A **vault** is a flat folder of papers in a git repository. Anyone can host one. This
   repository holds the tools and one [example vault](example-vault).
-- A paper reports its own results: the small values each run returned are written into the
-  paper by the runner. With the paper alone you can read them, cite them, and rerun the paper.
-- **Logs** are everything too large for the paper: full run outputs and the run log. They are
-  optional. With them you can recompute anything from the raw outputs.
+- A paper carries its **log**: what each of its calls returned and emitted, written into the
+  file by the runner. There is no other store. With the paper alone you can read its results,
+  check its claims, cite them, and rerun it.
+- The log is short because the author chooses what goes in it: the numbers the claims read,
+  the metric later papers will compare against, a curve at a few points. It is all a later
+  paper has unless it reruns yours.
 - A paper can be written first and run, or written afterwards as the summary of research done
-  elsewhere. Either way its results come from running the paper itself.
+  elsewhere. Either way its log comes from running the paper itself.
 - A vault's cites are ordinary markdown links, so a vault opens as a linked set of notes in a
   tool such as Obsidian.
-- A **store** is where logs are shared. This repository's store is the public dataset
-  [rsi-research-org/tinypaper-store](https://huggingface.co/datasets/rsi-research-org/tinypaper-store),
-  set in [tinypaper.toml](tinypaper.toml). A token, when a store needs one, goes in a `.env`
-  file (see [.env.example](.env.example)).
 
 The rules that keep it honest:
 
 1. **The paper's own code is in the file.** A result is the value a function returned, not text a script printed.
 2. **A claim's status is computed, never written.** It holds, fails, or is open.
-3. **Prose is not evidence.** Results are written by the runner, and `check` says whether they are only reported or also backed by logs.
-4. **Everything is logged.** The run log records every run made for a paper and every edit to a claim, so a reader can see how much was tried.
+3. **Prose is not evidence.** The log is written by the runner, and a rerun is compared with it point by point.
+4. **What was tried is counted.** The log records how many runs were made for the paper and which claims were edited after results existed.
 
 ## Using it
 
@@ -93,25 +92,21 @@ import tinypaper as tp
 vault = tp.Vault("example-vault")          # a folder of papers
 paper = vault["transformer"]               # one paper, as typed parts
 
-paper.claims                               # its claims; also .cites, .envs, .data, .code, .results
-print(paper.check().text())                # reachable? consistent? which claims hold on the reported results?
-
-paper.load_logs()                          # optional: fetch the full outputs from the store
-print(paper.check().text())                # now also checks that the logs agree with the paper
+paper.claims                               # its claims; also .cites, .envs, .data, .code, .log
+print(paper.check().text())                # reachable? consistent? which claims hold on its log?
 
 result = paper.reproduce(time="10m")       # rerun on this machine, as far as ten minutes gets
 print(result.text())                       # the tier reached, each claim, and the time still needed
 
-paper.run(name="mine")                     # as the author: run what has no fresh result, and write the results block
+paper.run(name="mine")                     # as the author: run what is not logged, and write the log into the paper
                                            # (safe to call from several processes at once, one per GPU)
-paper.push()                               # upload the logs to the store
-vault.to_jsonl("vault.jsonl")              # every paper as one line of JSON
+vault.to_jsonl("vault.jsonl")              # every paper, with its log, as one line of JSON
 ```
 
-- **`check`** runs nothing. It fails if the paper breaks the format, if something needed to
-  rerun it is unreachable (a cited paper, a data file), or if the logs contradict what the
-  paper reports. It reports each claim's status, stale results, how the machine differed from
-  the declared environment, and claims in other papers that challenge this one.
+- **`check`** runs nothing. It fails if the paper breaks the format, or if something needed to
+  rerun it is unreachable (a cited paper, a data file). It reports each claim's status, which
+  calls are not logged, how the machine differed from the declared environment, and claims in
+  other papers that challenge this one.
 - **`reproduce`** reports a tier, not a score: valid, checked, starts, prefix, partial, full,
   robust. More time reaches a higher tier, and a second call continues where the first
   stopped. A paper written for a GPU still reaches a tier on a CPU.

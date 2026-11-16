@@ -1,14 +1,13 @@
 ---
 title: Neural models gain most over counts at the start of a word
-tinypaper: 0.3
+tinypaper: 0.4
 date: 2026-11-15
 ---
 
 Cites: [char-bigram](char-bigram.md), [ngram](ngram.md), [rnn](rnn.md), [transformer](transformer.md)
 
-This paper runs nothing. Every cited paper logged the cost in bits of each test character,
-on the same characters, so this paper can ask where the cost falls. Its claims need those
-logs: with the papers alone they are open. It splits the scored
+This paper runs nothing. Every cited paper logged its cost at the start of a word and
+elsewhere, on the same characters, so this paper can ask where the cost falls. It splits the scored
 characters into those that start a word (they follow a space or a newline) and the rest.
 
 ```cite
@@ -32,41 +31,35 @@ at: ./transformer.md
 ```
 
 ```python code=analysis
-import torch
+from statistics import mean
 
 
-def bits(runs):
-    # per-character bits, averaged over seeds
-    return torch.stack([x.out["test_bits"] for x in runs]).mean(0)
-
-
-def starts(d):
-    # for each scored test character: does it follow a space or a newline?
-    gap = torch.tensor([c in " \n" for c in d.vocab])
-    return gap[d.test[d.skip - 1:-1]]
+def at(runs, where):
+    # the logged cost at word starts ("at_word_start") or elsewhere ("elsewhere"), averaged over seeds
+    return mean(x.out[where] for x in runs)
 
 
 def gain(counts, neural, where):
-    return (bits(counts) - bits(neural))[where].mean().item()
+    return at(counts, where) - at(neural, where)
 ```
 
 ```python claim=starts_are_hard stated=2026-11-15
 def starts_are_hard(r):
     # for the 5-gram, a word's first character costs over 1.5 times a later character
-    cost, first = bits(r.ng.sweep.where(n=5, alpha=0.03)), starts(base.text)
-    return cost[first].mean() > 1.5 * cost[~first].mean()
+    best = r.ng.sweep.where(n=5, alpha=0.03)
+    return at(best, "at_word_start") > 1.5 * at(best, "elsewhere")
 ```
 
 ```python claim=transformer_gain stated=2026-11-15 differs=fn
 def transformer_gain(r):
     # the transformer's gain over the 5-gram is larger at word starts than elsewhere
-    counts, first = r.ng.sweep.where(n=5, alpha=0.03), starts(base.text)
-    return gain(counts, r.tr.transformer, first) > gain(counts, r.tr.transformer, ~first)
+    counts = r.ng.sweep.where(n=5, alpha=0.03)
+    return gain(counts, r.tr.transformer, "at_word_start") > gain(counts, r.tr.transformer, "elsewhere")
 ```
 
 ```python claim=gru_gain stated=2026-11-15 differs=fn
 def gru_gain(r):
     # and the same holds for the GRU
-    counts, first = r.ng.sweep.where(n=5, alpha=0.03), starts(base.text)
-    return gain(counts, r.rnn.gru, first) > gain(counts, r.rnn.gru, ~first)
+    counts = r.ng.sweep.where(n=5, alpha=0.03)
+    return gain(counts, r.rnn.gru, "at_word_start") > gain(counts, r.rnn.gru, "elsewhere")
 ```
