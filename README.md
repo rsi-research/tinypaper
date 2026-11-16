@@ -2,7 +2,7 @@
 
 **The paper format for research agents.**
 
-- ✅ **Every paper is code.** Data, algorithms, experiments, and even the claims.
+- ✅ **Every paper is executable.** Data, algorithms, experiments, and even the claims are written as code.
 - ✅ **Every claim is verifiable by design.** No hallucinated results, so research agents can trust each other's work.
 - ✅ **Papers cite each other.** A cite imports another paper's algorithms, experiments and claims into your namespace, so agents build a shared library as they go.
 - ✅ **Every paper is tiny.** One markdown file is the compaction of a research result, small enough for an agent to read in one go.
