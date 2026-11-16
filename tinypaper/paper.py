@@ -1,20 +1,50 @@
-"""Paper: one markdown file as a tree of typed parts. Parsing, its namespace, its calls and its log."""
+"""Paper: one markdown file as typed parts (see format.py), its namespace, its calls and its log."""
 import importlib.metadata, inspect, json, linecache, os, platform, re, sys, time, types
-from typing import Annotated, Any, Optional, Union
-import yaml
-from pydantic import Field, PrivateAttr, ValidationError
-from . import records, store
+from dataclasses import dataclass
+from typing import Any, Optional
+from pydantic import PrivateAttr
+from . import format as fmt, records, store
 from .verify import PaperVerify
-from .model import (Cite, Claim, Code, Data, Declared, Entry, Env, Experiments, Header, Local, Log, Outcome, Prose, Strict, sha)
+from .format import Entry, Header, Log, Part, Prose, Strict, sha
 from .records import Stop, TooLarge, encode, fits
 from .reproduce import PaperReproduce
 from .store import Unreachable
 
-FENCE = re.compile(r"^```([^\n`]+)\n(.*?)^```[ \t]*$", re.S | re.M)
-KINDS = {"cite", "env", "data", "python", "log"}
 NAMES = {}      # id(object) -> canonical name, for data objects passed as call arguments
 PAPERS = {}     # absolute path -> Paper
-Part = Annotated[Union[Prose, Cite, Env, Data, Code, Experiments, Claim, Log], Field(discriminator="kind")]
+
+
+class Local(Strict):
+    """What `reproduce` keeps beside the vault for one paper. None of it is part of the paper."""
+    rerun: dict[str, Entry] = {}               # the calls a reproduction has finished on this machine
+
+
+@dataclass
+class Declared:
+    """One call an experiments block declares, under one experiment name. It holds live functions."""
+    paper: Any
+    name: str                      # the experiment
+    fn: Any
+    kw: dict                       # the arguments as written, live: pass them to fn
+    env: Any
+    seed: Optional[int]
+    args: dict                     # the arguments as a log entry names them
+
+    @property
+    def id(self):
+        """The call's identity: its function, arguments, seed and code. The experiment name is not part of it."""
+        return sha(json.dumps(["fn:" + self.fn.__name__, self.args, self.seed, self.paper.code_hash], sort_keys=True))[:16]
+
+
+@dataclass
+class Outcome:
+    """One execution of a call: its entry if it finished, and how it ended."""
+    entry: Optional[Entry]
+    status: str                    # done, stopped or error
+    error: Optional[str]
+    emitted: list
+    seconds: float
+    machine: dict
 
 
 class Namespace(dict):
@@ -48,30 +78,6 @@ def canonical(v):
     if callable(v):
         return "fn:" + getattr(v, "__name__", type(v).__name__)
     raise TypeError(f"call argument {v!r} is not a literal, a function, a data block or a call")
-
-
-def log_text(log):
-    return "```log\n" + "\n".join([json.dumps(dict(ran_on=log.ran_on))] + [e.model_dump_json(exclude_defaults=True) for e in log.entries]) + "\n```"
-
-
-def parse_block(kind, attrs, body, raw):
-    if kind in ("cite", "env", "data"):
-        return {"cite": Cite, "env": Env, "data": Data}[kind].model_validate({**yaml.safe_load(body), "raw": raw})
-    if kind == "log":
-        lines = [json.loads(l) for l in body.splitlines() if l.strip()]
-        return Log(ran_on=lines[0].get("ran_on", {}), entries=[Entry.model_validate(l) for l in lines[1:]])
-    if attrs == ["experiments"]:
-        return Experiments(source=body, raw=raw)
-    a = dict(x.split("=", 1) if "=" in x else (x, "") for x in attrs)
-    if set(a) == {"code"}:
-        return Code(name=a["code"], source=body, raw=raw)
-    if "claim" in a:
-        if set(a) - {"claim", "stated", "challenges"}:
-            raise ValueError(f"claim {a['claim']} has an unknown attribute: {', '.join(sorted(set(a) - {'claim', 'stated', 'challenges'}))}")
-        if "stated" not in a:
-            raise ValueError(f"claim {a['claim']} has no `stated` date")
-        return Claim(id=a["claim"], stated=a["stated"], source=body, raw=raw, challenges=a.get("challenges"))
-    raise ValueError("a python block is `code=<name>`, `experiments` or `claim=<id>`")
 
 
 def default_device():
@@ -128,32 +134,7 @@ class Paper(Strict, PaperVerify, PaperReproduce):
 
     @classmethod
     def parse(cls, text, path):
-        parts, problems, pos = [], [], 0
-        for m in FENCE.finditer(text):
-            head = m.group(1).split()
-            if head[0] not in KINDS:
-                continue                              # an ordinary code fence in the prose
-            line = text[:m.start()].count("\n") + 1
-            try:
-                block = parse_block(head[0], head[1:], m.group(2), m.group(0))
-            except ValidationError as e:
-                problems.append(f"line {line}: {head[0]} block: " + "; ".join(f"{'.'.join(map(str, x['loc']))}: {x['msg']}" for x in e.errors()))
-                continue
-            except Exception as e:
-                problems.append(f"line {line}: {head[0]} block: {e}")
-                continue
-            if text[pos:m.start()]:
-                parts.append(Prose(text=text[pos:m.start()]))
-            parts.append(block)
-            pos = m.end()
-        if text[pos:]:
-            parts.append(Prose(text=text[pos:]))
-        header = None
-        m = re.match(r"---\n(.*?)\n---\n", text, re.S)
-        try:
-            header = Header.model_validate(yaml.safe_load(m.group(1)) if m else {})
-        except ValidationError as e:
-            problems += [f"header has no `{x['loc'][0]}`" for x in e.errors()]
+        header, parts, problems = fmt.parse(text)
         paper = cls(path=os.path.abspath(path), header=header, parts=parts, problems=problems)
         paper._text = text
         for c in paper._of("cite"):
@@ -164,8 +145,8 @@ class Paper(Strict, PaperVerify, PaperReproduce):
         return paper
 
     def render(self):
-        """The paper as markdown: the prose and blocks as written, and the log one JSON line per call."""
-        return "".join(p.text if p.kind == "prose" else log_text(p) if p.kind == "log" else p.raw for p in self.parts)
+        """The paper as markdown."""
+        return fmt.render(self.parts)
 
     def _of(self, kind):
         return [p for p in self.parts if p.kind == kind]

@@ -4,7 +4,7 @@ import hashlib, os, re, shutil, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tinypaper as tp
 from tinypaper import store
-from tinypaper.model import Log
+from tinypaper.format import EXAMPLE, Log
 
 A = '''---
 title: Toy root
@@ -292,6 +292,23 @@ def test_log_written_by_hand():
     edit(a, re.search(r'"call":"[0-9a-f]+","fn":"fn:use"', open(a).read()).group(0), '"fn":"fn:use"')
     rep = paper(a).verify()
     assert not rep.ok and any("matches no call" in x for x in rep.problems)     # an entry for a call the paper does not make
+
+
+def test_example_in_format():
+    d, a, b = setup()
+    x = os.path.join(d, "toy", "x.md")
+    open(x, "w").write(EXAMPLE)                                   # the paper format.py shows
+    rep = paper(x).verify()
+    assert rep.valid and not rep.problems and (rep.calls, rep.logged) == (4, 1), rep.problems
+    edit(x, EXAMPLE[EXAMPLE.index("```log"):], "")
+    points = None
+    for dcl in paper(x).calls():                                  # the recipe in Log's docstring
+        with tp.capture() as points:
+            out = dcl.fn(seed=dcl.seed, **dcl.kw)
+        assert len(points) == 14 and "t" in points[0] and out["lr"] == dcl.args["lr"]
+    run(x)
+    rep = paper(x).verify()
+    assert rep.ok and rep.claims == {"larger_is_faster": "holds"}, rep.problems
 
 
 def test_cite_from_another_vault():

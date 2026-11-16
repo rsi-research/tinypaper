@@ -1,8 +1,9 @@
 """Calls as claims see them, and how a call's output is written into a log."""
 import json, time
+from contextlib import contextmanager
+from .format import LIMIT
 from .store import Unreachable
 
-LIMIT = 20000               # characters one call may add to a log; beyond it the call must log a summary
 EARLY = 10                  # how many emitted points count as a call's first steps
 
 _current = None             # the call being run, or None
@@ -31,6 +32,22 @@ def emit(**values):
     c["stream"].append(entry)
     if (c["max"] is not None and len(c["stream"]) >= c["max"]) or (c["deadline"] is not None and time.time() > c["deadline"]):
         raise Stop()
+
+
+@contextmanager
+def capture():
+    """Collect what `emit` is given while your own code runs a paper's function:
+
+        with capture() as points:
+            out = fn(**arguments)
+
+    `points` is then the call's `emitted` for its log entry."""
+    global _current
+    _current = c = dict(stream=[], max=None, deadline=None, start=time.time())
+    try:
+        yield c["stream"]
+    finally:
+        _current = None
 
 
 def source(obj):

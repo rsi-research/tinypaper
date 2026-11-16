@@ -1,6 +1,6 @@
 """paper.verify(): is the paper well formed, can it be rerun, and which claims hold on its log?"""
 import os
-from .model import Strict
+from .format import Strict
 from .records import differ, evaluate
 from .store import Unreachable, data_file
 

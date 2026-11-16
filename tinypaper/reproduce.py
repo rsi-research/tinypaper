@@ -2,7 +2,7 @@
 import re, time as clock
 from statistics import median
 from typing import Optional
-from .model import Strict
+from .format import Strict
 from .records import EARLY, evaluate
 
 TOLERANCE = 1e-3            # how far a rerun's emitted value may be from the paper's, relative to it

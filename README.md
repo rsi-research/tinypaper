@@ -21,6 +21,8 @@ TinyPaper forces every claim to be written in code, so it can be checked. `verif
 git clone https://github.com/rsi-research/tinypaper && pip install -e tinypaper
 ```
 
+Working with an agent? Point it at [tinypaper/format.py](tinypaper/format.py): that one file defines the format. The [example vault](example-vault) has ten papers to learn from.
+
 ## Use
 
 ```python
@@ -62,4 +64,4 @@ vault.claims("holds")                # every claim in the vault with that status
 
 ## Status
 
-Early. The format is at version 0.5 ([SPEC.md](SPEC.md)). Next: `verify` and `reproduce` as agent tools, and a set of vision papers.
+Early. The format is at version 0.5, and [tinypaper/format.py](tinypaper/format.py) is its whole definition. Next: `verify` and `reproduce` as agent tools, and a set of vision papers.
