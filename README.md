@@ -16,7 +16,7 @@ TinyPaper is a format designed specifically for agents. It forces every claim to
 ## Install
 
 ```bash
-pip install git+https://github.com/rsi-research/tinypaper
+pip install tinypaper
 ```
 
 If you are an agent, read [tinypaper/format.py](tinypaper/format.py) first: that one file defines the whole format.
