@@ -1,6 +1,7 @@
 """What a CI job runs on a vault: verify the papers a change touches, and rerun them briefly.
 
     python -m tinypaper.ci example-vault --base <commit> --time 2m
+    python -m tinypaper.ci my-vault --base <commit> --append-only     # for a shared vault: also refuse changes to published papers
 
 The job needs no secrets and must not be given any: it executes the code in submitted papers."""
 import argparse, os, subprocess, sys
@@ -33,6 +34,18 @@ def touched(vault, base):
     return [n for n in papers if n in changed], "changed papers and the papers that cite them"
 
 
+def changed_existing(vault, base):
+    """Papers that existed at commit `base` and were changed or deleted since: [(status, file name)].
+    A vault is append-only, so for a shared vault this should be empty."""
+    out = subprocess.run(["git", "diff", "--name-status", "--no-renames", base, "HEAD", "--", "."], capture_output=True, text=True, check=True, cwd=vault.path).stdout
+    found = []
+    for line in out.splitlines():
+        status, _, name = line.partition("\t")
+        if name.endswith(".md") and "/" not in os.path.relpath(os.path.join(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True, cwd=vault.path).stdout.strip(), name), vault.path) and status[0] in "MD":
+            found.append((status[0], os.path.basename(name)))
+    return found
+
+
 def install(papers):
     """Install the packages the papers' environments pin."""
     pins = sorted({pin for p in papers for e in p.envs.values() for pin in e.packages})
@@ -47,8 +60,15 @@ def main(argv=None):
     ap.add_argument("--base", default=os.environ.get("BASE"))
     ap.add_argument("--time", default="2m", help="time limit for rerunning each paper")
     ap.add_argument("--no-install", action="store_true")
+    ap.add_argument("--append-only", action="store_true", help="fail if a paper that already existed was changed or deleted")
     args = ap.parse_args(argv)
     vault = Vault(args.vault)
+    if args.append_only and args.base and set(args.base) != {"0"}:
+        broken = changed_existing(vault, args.base)
+        if broken:
+            for status, name in broken:
+                print(f"{name} was {'changed' if status == 'M' else 'deleted'}: a vault is append-only. Publish a new paper that cites or challenges it instead.")
+            return 1
     names, why = touched(vault, args.base)
     papers = [vault[n] for n in names]
     pins = [] if args.no_install else install(papers)

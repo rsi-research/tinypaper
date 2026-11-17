@@ -255,7 +255,7 @@ class Paper(Strict, PaperVerify, PaperReproduce):
             obj = ns[spec.load]({k: store.data_file(f.url, f.sha256, verify) for k, f in spec.files.items()})
         else:
             obj = ns[spec.load](eval(spec.source, ns), **spec.args)
-        NAMES[id(obj)] = f"data:{self.stem}/{name}"
+        NAMES[id(obj)] = f"data:{name}@{self.code_hash[:8]}"      # by content, not by file name: a paper can be renamed
         return obj
 
     def declared(self):

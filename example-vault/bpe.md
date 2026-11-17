@@ -125,7 +125,7 @@ def tokens_help(r):
 
 ```log
 {"ran_on": {"python": "3.11.4", "device": "cuda", "packages": {"torch": "2.6.0"}, "gpu": "NVIDIA A40"}}
-{"call":"802d59e5a95ddb8a","fn":"fn:ngram","args":{"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
-{"call":"cb20930ba6c4642a","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok0","n":2},"seconds":0.03,"out":{"test_bpc":3.604349136352539,"val_bpc":3.5661234855651855,"train_bpc":3.5481133460998535,"at_word_start":4.402108192443848,"elsewhere":3.4198341369628906}}
-{"call":"160c5a0ed4276080","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:bpe/tok256","n":2},"seconds":0.02,"out":{"test_bpc":2.896505355834961,"val_bpc":2.824864387512207,"train_bpc":2.6760613918304443,"at_word_start":5.905152797698975,"elsewhere":5.438847541809082}}
+{"call":"1c5d5f5f2be6c951","fn":"fn:ngram","args":{"d":"data:tok0@103ef11a","n":2},"seconds":0.03,"out":{"test_bpc":3.5916237831115723,"val_bpc":3.5677802562713623,"train_bpc":3.551269769668579,"at_word_start":4.402455806732178,"elsewhere":3.404085636138916}}
+{"call":"9c08e9cca86bbf62","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:tok0@103ef11a","n":2},"seconds":0.03,"out":{"test_bpc":3.604349136352539,"val_bpc":3.5661234855651855,"train_bpc":3.5481133460998535,"at_word_start":4.402108192443848,"elsewhere":3.4198341369628906}}
+{"call":"54622ded3d03e6a9","fn":"fn:ngram","args":{"alpha":0.03,"d":"data:tok256@103ef11a","n":2},"seconds":0.02,"out":{"test_bpc":2.896505355834961,"val_bpc":2.824864387512207,"train_bpc":2.6760613918304443,"at_word_start":5.905152797698975,"elsewhere":5.438847541809082}}
 ```

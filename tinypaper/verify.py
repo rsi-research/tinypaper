@@ -1,5 +1,5 @@
 """paper.verify(): is the paper well formed, can it be rerun, and which claims hold on its log?"""
-import os
+import os, re
 from .format import Strict
 from .records import differ, evaluate
 from .store import Unreachable, data_file
@@ -81,6 +81,8 @@ class PaperVerify:
             problems.append(f"invalid: {type(e).__name__}: {e}")
             return report
         problems += [f"invalid: {p}" for p in self.problems]
+        if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", self.stem):
+            problems.append(f"invalid: the file name `{self.stem}.md` must be lowercase words joined by hyphens, such as `mlp-window-8-beats-ngrams.md`")
         for c in self.claims:
             if c.challenges:
                 alias, _, target = c.challenges.partition(".")
@@ -113,7 +115,6 @@ class PaperVerify:
                 report.compares[c.id] = differ(read)
             if status.startswith("error"):
                 problems.append(f"claim {c.id} raised an error: {status[7:]}")
-        import re
         written = re.search(r"^Claims: .*\n", self._text or "", re.M)
         if written and written.group(0) != self.status_line():
             problems.append(f"invalid: the paper says `{written.group(0).strip()}` but its log gives `{self.status_line().strip()}`; paper.tidy() rewrites the line")

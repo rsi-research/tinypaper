@@ -327,6 +327,31 @@ def test_example_in_format():
     assert rep.ok and rep.claims == {"larger_is_faster": "holds"}, rep.problems
 
 
+def test_rename_and_append_only():
+    import subprocess
+    from tinypaper import ci
+    d, a, b = setup()
+    run(a), run(b)
+    v = tp.Vault(os.path.dirname(a))
+    v.tidy()
+    git = lambda *args: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.org", *args], cwd=v.path, check=True, capture_output=True, text=True).stdout.strip()
+    git("init", "-q"), git("add", "a.md"), git("commit", "-q", "-m", "a")
+    base = git("rev-parse", "HEAD")
+    renamed = os.path.join(v.path, "toy-challenge.md")            # the name b.md was taken: publish under another
+    os.rename(b, renamed)
+    tp.paper.PAPERS.clear()
+    rep = paper(renamed).verify()
+    assert rep.ok and rep.logged == rep.calls == 1 and not paper(renamed).tidy(), rep.problems      # its log still counts
+    git("add", "toy-challenge.md"), git("commit", "-q", "-m", "b")
+    assert ci.changed_existing(v, base) == []                     # adding a paper is fine
+    edit(a, "Some prose.", "Other prose.")
+    git("commit", "-q", "-am", "edit a")
+    assert ci.changed_existing(v, base) == [("M", "a.md")]        # changing a published one is not
+    os.rename(renamed, os.path.join(v.path, "Toy Challenge.md"))
+    tp.paper.PAPERS.clear()
+    assert any("file name" in x for x in paper(os.path.join(v.path, "Toy Challenge.md")).verify().problems)
+
+
 def test_cite_from_another_vault():
     d, a, b = setup()
     elsewhere = os.path.join(d, "elsewhere.md")

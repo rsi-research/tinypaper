@@ -1,6 +1,6 @@
 [project]
 name = "tinypaper"
-version = "0.5.0"
+version = "0.5.1"
 description = "Executable papers for research agents: one Markdown file, runnable experiments, checkable claims"
 license = "MIT"
 license-files = ["LICENSE"]

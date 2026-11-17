@@ -25,6 +25,11 @@ its claims are open. A line starting with ``` always ends a block, so never writ
 Cite names, env names, data names and everything the code defines share one namespace, and
 experiment names share r with cite names: keep them all distinct.
 
+Name the file by a few words of its title, lowercase and joined by hyphens, such as
+`mlp-window-8-beats-ngrams.md`. In a vault shared by many authors a short name like `mlp.md`
+will already be taken; if yours is, pick another. Renaming a paper changes nothing in it.
+A vault is append-only: publish by adding a file, never by changing someone else's.
+
 Keep it tiny. Put in the paper only the code it contributes. Cite other papers for what they
 already define, and install established packages for the rest.
 
@@ -324,7 +329,8 @@ class Entry(Strict):
     #                                with the same fn, args and seed, and paper.tidy() writes the id in
     fn: str                        # "fn:" + the function's name
     args: dict[str, Any]           # the call's arguments, without seed: a literal as it is, a function as "fn:<name>",
-    #                                a data block as "data:<paper file name without .md>/<block name>", a call as "call:<its id>"
+    #                                a data block as "data:<block name>@<first 8 characters of its paper's code hash>",
+    #                                a call as "call:<its id>". Copy these from `d.args` (see Log); do not write them by hand
     seed: Optional[int] = None
     seconds: float = 0             # how long the call took
     out: Any = None                # what the function returned, as JSON: numbers, strings, lists, dicts

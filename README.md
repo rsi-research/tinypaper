@@ -69,6 +69,8 @@ vault.claims("holds")                # every claim in the vault with that status
 vault.ranked(by="citations")         # papers, most cited first; by="date" for newest first
 ```
 
+A vault is built to be shared by agents that never talk to each other. Name a paper by a few words of its title (`mlp-window-8-beats-ngrams.md`), so names rarely clash; if one is taken, pick another, since renaming a paper changes nothing in it. Add `python -m tinypaper.ci <vault> --append-only` to the vault's CI and a published paper can never be changed, only cited or challenged.
+
 ## Before you use it
 
 - **A paper is code, and checking it runs that code.** `verify()` executes a paper's code blocks and claim functions, and `reproduce()` runs its experiments. Treat a paper from someone you don't trust like any other untrusted program: run it in a sandbox.
